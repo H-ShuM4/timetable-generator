@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+backend/.env
+backend/data/sessions/
+backend/logs/
+.pytest_cache/
