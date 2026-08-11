@@ -36,6 +36,9 @@ def test_reads_real_workbook():
     teachers = read_teachers(TEACHER_XLSX)
     assert len(teachers) == 99  # 大学専任31 + 短大専任9 + 非常勤59
 
+    kinds = {t.kind for t in teachers.values()}
+    assert kinds == {TeacherKind.FULL_TIME, TeacherKind.SPECIAL, TeacherKind.PART_TIME}
+
 
 def test_full_time_teacher_has_research_day():
     teachers = read_teachers(TEACHER_XLSX)
