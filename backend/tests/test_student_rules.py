@@ -1,0 +1,101 @@
+from app.constraints.context import Context
+from app.constraints.student_rules import check_h2, check_h3
+from app.models.enums import Category, Department, Quarter, Term
+from app.models.subject import Subject
+from app.models.timeslot import TimeSlot
+from app.models.timetable import AssignmentSource, Timetable
+
+
+def make(code, category, year=1, department=Department.MANAGEMENT, base_name=None,
+         courses=None, is_seminar=False, term=Term.SPRING, quarter=None, teacher="教員甲"):
+    return Subject(
+        code=code, name=code, base_name=base_name or code, department=department,
+        year=year, term=term, quarter=quarter, category=category,
+        courses=courses or [], teacher=teacher, is_seminar=is_seminar,
+    )
+
+
+def place(subjects, code, slot):
+    ctx = Context.from_lists(subjects, [])
+    tt = Timetable()
+    tt.place(code, (slot,), AssignmentSource.PRELOCK)
+    return ctx, tt
+
+
+def test_h2_flags_two_required_in_same_department_and_year():
+    a = make("A1", Category.REQUIRED)
+    b = make("B1", Category.REQUIRED)
+    ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
+    violations = check_h2(ctx, tt, b, (TimeSlot("月", 1),))
+    assert [v.rule_id for v in violations] == ["H2"]
+    assert violations[0].related_code == "A1"
+
+
+def test_h2_allows_different_year():
+    a = make("A1", Category.REQUIRED, year=1)
+    b = make("B1", Category.REQUIRED, year=2)
+    ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
+    assert check_h2(ctx, tt, b, (TimeSlot("月", 1),)) == []
+
+
+def test_h2_allows_different_department():
+    a = make("A1", Category.REQUIRED, department=Department.ACCOUNTING)
+    b = make("B1", Category.REQUIRED, department=Department.MANAGEMENT)
+    ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
+    assert check_h2(ctx, tt, b, (TimeSlot("月", 1),)) == []
+
+
+def test_h2_allows_same_seminar_with_different_teachers():
+    a = make("A1", Category.REQUIRED, base_name="日本語リテラシーⅠ", is_seminar=True)
+    b = make("B1", Category.REQUIRED, base_name="日本語リテラシーⅠ", is_seminar=True)
+    ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
+    assert check_h2(ctx, tt, b, (TimeSlot("月", 1),)) == []
+
+
+def test_h2_flags_two_different_seminars():
+    a = make("A1", Category.REQUIRED, base_name="日本語リテラシーⅠ", is_seminar=True)
+    b = make("B1", Category.REQUIRED, base_name="プレゼミナール", is_seminar=True)
+    ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
+    assert [v.rule_id for v in check_h2(ctx, tt, b, (TimeSlot("月", 1),))] == ["H2"]
+
+
+def test_h2_allows_non_overlapping_quarters():
+    a = make("A1", Category.REQUIRED, quarter=Quarter.Q1)
+    b = make("B1", Category.REQUIRED, quarter=Quarter.Q2)
+    ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
+    assert check_h2(ctx, tt, b, (TimeSlot("月", 1),)) == []
+
+
+def test_h2_ignores_electives():
+    a = make("A1", Category.ELECTIVE)
+    b = make("B1", Category.REQUIRED)
+    ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
+    assert check_h2(ctx, tt, b, (TimeSlot("月", 1),)) == []
+
+
+def test_h3_flags_shared_course():
+    a = make("A1", Category.ELECTIVE_REQUIRED, courses=["情報コース"])
+    b = make("B1", Category.ELECTIVE_REQUIRED, courses=["情報コース", "経営コース"])
+    ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
+    assert [v.rule_id for v in check_h3(ctx, tt, b, (TimeSlot("月", 1),))] == ["H3"]
+
+
+def test_h3_allows_disjoint_courses():
+    a = make("A1", Category.ELECTIVE_REQUIRED, courses=["情報コース"])
+    b = make("B1", Category.ELECTIVE_REQUIRED, courses=["観光まちづくりコース"])
+    ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
+    assert check_h3(ctx, tt, b, (TimeSlot("月", 1),)) == []
+
+
+def test_h3_skips_when_course_is_unknown():
+    a = make("A1", Category.ELECTIVE_REQUIRED, courses=[])
+    b = make("B1", Category.ELECTIVE_REQUIRED, courses=["情報コース"])
+    ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
+    assert check_h3(ctx, tt, b, (TimeSlot("月", 1),)) == []
+
+
+def test_h3_allows_different_year():
+    a = make("A1", Category.ELECTIVE_REQUIRED, year=1, courses=["情報コース"])
+    b = make("B1", Category.ELECTIVE_REQUIRED, year=2, courses=["情報コース"])
+    ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
+    assert check_h3(ctx, tt, b, (TimeSlot("月", 1),)) == []
