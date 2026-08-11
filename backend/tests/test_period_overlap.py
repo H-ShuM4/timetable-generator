@@ -34,3 +34,17 @@ def test_within_fall(qa, qb, expected):
 def test_spring_and_fall_never_overlap():
     assert periods_overlap(SPRING, None, FALL, None) is False
     assert periods_overlap(SPRING, Quarter.Q1, FALL, Quarter.Q3) is False
+
+
+@pytest.mark.parametrize("term,quarter", [
+    (SPRING, None),
+    (SPRING, Quarter.Q1),
+    (SPRING, Quarter.Q2),
+    (FALL, None),
+    (FALL, Quarter.Q3),
+    (FALL, Quarter.Q4),
+    (Term.FULL_YEAR, None),
+])
+def test_full_year_overlaps_everything(term, quarter):
+    assert periods_overlap(Term.FULL_YEAR, None, term, quarter) is True
+    assert periods_overlap(term, quarter, Term.FULL_YEAR, None) is True

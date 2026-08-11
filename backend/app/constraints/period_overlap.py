@@ -21,7 +21,10 @@ def periods_overlap(
     前期と後期は常に重ならない。同一学期内では、前①と前②、
     後①と後②のみ重ならない。クオーター指定がない側は学期全体を
     占めるため、同一学期内のどのクオーターとも重なる。
+    通年は年間を通じて開講されるため、どの期間とも重なる。
     """
+    if Term.FULL_YEAR in (term_a, term_b):
+        return True
     if term_a != term_b:
         return False
     if quarter_a is None or quarter_b is None:
