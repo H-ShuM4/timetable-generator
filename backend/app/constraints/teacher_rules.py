@@ -17,10 +17,18 @@ MAX_CONSECUTIVE = 2
 def check_h1(
     context: Context, timetable: Timetable, subject: Subject, slots: tuple[TimeSlot, ...]
 ) -> list[Violation]:
-    """同一教員が同曜日・同時限に別科目を持たない（全学科横断）。"""
+    """同一教員が同曜日・同時限に別科目を持たない（全学科横断）。
+
+    合同ペアは 2 行に分かれていても物理的に 1 つの授業で、担当教員も
+    同一である。H4 が同一コマへの配置を要求するため、joint_id が一致
+    する相手は衝突とみなさない。除外しないと H1 と H4 が矛盾し、
+    合同科目を一切配置できなくなる。
+    """
     violations: list[Violation] = []
     for slot in slots:
         for other in others_at(context, timetable, slot, subject.code):
+            if subject.joint_id and other.joint_id == subject.joint_id:
+                continue
             if other.teacher and other.teacher == subject.teacher:
                 violations.append(Violation(
                     rule_id="H1",

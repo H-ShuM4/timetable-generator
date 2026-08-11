@@ -53,6 +53,30 @@ def test_h1_allows_non_overlapping_quarters():
     assert check_h1(ctx, tt, b, (TimeSlot("月", 1),)) == []
 
 
+def test_h1_exempts_joint_pairs():
+    # 合同ペアは物理的に1つの授業。H4 が同一コマを要求するため H1 は無視する
+    a = make_subject("A1", department=Department.ACCOUNTING)
+    b = make_subject("B1", department=Department.MANAGEMENT)
+    a.joint_id = b.joint_id = "J001"
+    ctx = build([a, b], [Teacher("教員甲", TeacherKind.FULL_TIME)])
+    tt = Timetable()
+    tt.place("A1", (TimeSlot("月", 1),), AssignmentSource.PRELOCK)
+
+    assert check_h1(ctx, tt, b, (TimeSlot("月", 1),)) == []
+
+
+def test_h1_still_flags_a_different_joint_group():
+    a = make_subject("A1", department=Department.ACCOUNTING)
+    b = make_subject("B1", department=Department.MANAGEMENT)
+    a.joint_id = "J001"
+    b.joint_id = "J002"
+    ctx = build([a, b], [Teacher("教員甲", TeacherKind.FULL_TIME)])
+    tt = Timetable()
+    tt.place("A1", (TimeSlot("月", 1),), AssignmentSource.PRELOCK)
+
+    assert [v.rule_id for v in check_h1(ctx, tt, b, (TimeSlot("月", 1),))] == ["H1"]
+
+
 def test_h1_ignores_the_subjects_own_existing_placement():
     a = make_subject("A1")
     ctx = build([a], [Teacher("教員甲", TeacherKind.FULL_TIME)])
