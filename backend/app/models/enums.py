@@ -11,6 +11,7 @@ class Department(str, Enum):
 class Term(str, Enum):
     SPRING = "前期"
     FALL = "後期"
+    FULL_YEAR = "通年"
 
 
 class Quarter(str, Enum):
