@@ -14,7 +14,7 @@
 - 全コマンドはプロジェクトルート `/home/myarm/py_venvs/Project_3` から実行する
 - Python の実行は必ず `.venv/bin/python`、pytest は `.venv/bin/pytest` を使う
 - 曜日は `月 火 水 木 金` の 5 種、時限は `1〜5` の 5 種。時限 `99` は「集中」を意味しグリッド対象外
-- 開講期は `前期 後期`、クオーターは `前① 前② 後① 後②`
+- 開講期は `前期 後期 通年`、クオーターは `前① 前② 後① 後②`。通年はどの期間とも重なる
 - 学科は `経営 会計 短期大学部` の 3 種（Excel の `学科` 列の値そのまま）
 - 科目区分は `必修 選択必修 選択` の 3 種
 - 教員区分は `専任 特任 非常勤 不明` の 4 種
@@ -250,6 +250,7 @@ class Department(str, Enum):
 class Term(str, Enum):
     SPRING = "前期"
     FALL = "後期"
+    FULL_YEAR = "通年"
 
 
 class Quarter(str, Enum):
@@ -347,6 +348,20 @@ def test_within_fall(qa, qb, expected):
 def test_spring_and_fall_never_overlap():
     assert periods_overlap(SPRING, None, FALL, None) is False
     assert periods_overlap(SPRING, Quarter.Q1, FALL, Quarter.Q3) is False
+
+
+@pytest.mark.parametrize("term,quarter", [
+    (SPRING, None),
+    (SPRING, Quarter.Q1),
+    (SPRING, Quarter.Q2),
+    (FALL, None),
+    (FALL, Quarter.Q3),
+    (FALL, Quarter.Q4),
+    (Term.FULL_YEAR, None),
+])
+def test_full_year_overlaps_everything(term, quarter):
+    assert periods_overlap(Term.FULL_YEAR, None, term, quarter) is True
+    assert periods_overlap(term, quarter, Term.FULL_YEAR, None) is True
 ```
 
 - [ ] **Step 7: テストを実行して失敗することを確認する**
@@ -381,10 +396,13 @@ def periods_overlap(
 ) -> bool:
     """2 つの開講期間が時間的に重なるなら True。
 
+    通年は年間を通じて開講されるため、どの期間とも重なる。
     前期と後期は常に重ならない。同一学期内では、前①と前②、
     後①と後②のみ重ならない。クオーター指定がない側は学期全体を
     占めるため、同一学期内のどのクオーターとも重なる。
     """
+    if Term.FULL_YEAR in (term_a, term_b):
+        return True
     if term_a != term_b:
         return False
     if quarter_a is None or quarter_b is None:
@@ -1371,7 +1389,8 @@ def test_junior_courses_are_read_from_the_field_column():
 def test_every_elective_required_subject_has_a_course():
     subjects = read_curriculum(CURRICULUM_XLSX)
     elective_required = [s for s in subjects if s.category is Category.ELECTIVE_REQUIRED]
-    assert len(elective_required) == 105  # 経営58 + 短大47
+    # 経営58 + 短大44（短大は生47行だが▲科目3件が各2行のため集約後44）
+    assert len(elective_required) == 102
     assert all(s.courses for s in elective_required)
 
 
