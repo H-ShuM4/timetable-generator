@@ -18,6 +18,10 @@ def check_h1(
     context: Context, timetable: Timetable, subject: Subject, slots: tuple[TimeSlot, ...]
 ) -> list[Violation]:
     """同一教員が同曜日・同時限に別科目を持たない（全学科横断）。"""
+    # Only check H1 if the teacher is being tracked in the context
+    if not subject.teacher or subject.teacher not in context.teachers:
+        return []
+
     violations: list[Violation] = []
     for slot in slots:
         for other in others_at(context, timetable, slot, subject.code):
