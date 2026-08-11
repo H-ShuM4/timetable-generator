@@ -1438,10 +1438,22 @@ git commit -m "feat: カリキュラム一覧 Excel の読み取りを追加"
 - Test: `backend/tests/test_joint_pairing.py`
 
 **Interfaces:**
-- Consumes: Task 3 の `Subject`
-- Produces: `assign_joint_ids(subjects: list[Subject]) -> list[str]` — `subjects` の `joint_id` を破壊的に設定し、ペアが成立しなかった科目コードのリストを返す
+- Consumes: Task 3 の `Subject`、Task 2 の `Department`
+- Produces:
+  - `JOINT_DEPARTMENTS: tuple[Department, ...]` — 経営・会計のみ
+  - `assign_joint_ids(subjects: list[Subject]) -> list[str]` — `subjects` の `joint_id` を破壊的に設定し、**フラグの付け忘れが疑われる科目コード**のリストを返す
 
-**背景:** 合同=○ の科目は経営側と会計側で対になっている。対応付けは「`base_name` + `teacher` + `term` の一致」で行う。ただし `マーケティングプロジェクト` は会計 1 年前期・経営 1 年後期で開講期が異なるため対にならない。この種の不一致は例外を投げず、コードのリストとして返して警告に回す。
+**背景（実データの構造）:**
+
+合同=○ は「その科目が経営・会計の合同開講である」ことを示すフラグで、実際の対応付けは**教員単位**で成立する。対応付けの鍵は `base_name` + `teacher` + `term` の一致。
+
+現行データでは 227 件が合同=○ で、その大半はゼミ系（課題研究Ⅰ、卒業研究Ⅰ・Ⅱ）である。同じ教員が経営・会計の両方にコマを持てばペアが成立し、片方の学科にしかコマがない教員は**単独のまま残るのが正常**。単独は警告の対象にしない。
+
+一方で、**他学科が合同としているのに、自学科のどのクラスにもフラグが付いていない**場合は、事務局の付け忘れである可能性が高い。これだけを警告に回す。
+
+判定を学科単位で行うのが要点である。同一学科・同一教員で複数クラスが開講され、そのうち 1 クラスだけが他学科と合同、という構造が実在する（例：`育児と介護` は経営に 2 クラスあり、`B53202` のみ会計と合同で `B53201` は単独）。この場合、経営には合同フラグの付いたクラスが存在するので付け忘れではない。「フラグの付いたクラスが 1 つも無い学科」だけを警告対象とする。
+
+`合同(経・会)` 列は大学シートにしか存在しないため、ペアリングもフラグ不一致の検出も**経営・会計に限定**する。短期大学部の科目は同名・同教員でも対象外とする。
 
 - [ ] **Step 1: 失敗するテストを書く**
 
@@ -1478,27 +1490,69 @@ def test_matching_pair_gets_same_joint_id():
         _subject("A1", "経営情報管理", Department.ACCOUNTING, Term.SPRING, "荒牧裕一"),
         _subject("B1", "経営情報管理", Department.MANAGEMENT, Term.SPRING, "荒牧裕一"),
     ]
-    unpaired = assign_joint_ids(subjects)
-    assert unpaired == []
+    assert assign_joint_ids(subjects) == []
     assert subjects[0].joint_id is not None
     assert subjects[0].joint_id == subjects[1].joint_id
 
 
-def test_different_term_does_not_pair():
+def test_different_term_does_not_pair_and_is_not_reported():
+    # マーケティングプロジェクトは会計1年前期・経営1年後期。別の授業なので正常
     subjects = [
         _subject("A2", "マーケティングプロジェクト", Department.ACCOUNTING, Term.SPRING, "増渕賢一郎"),
         _subject("B2", "マーケティングプロジェクト", Department.MANAGEMENT, Term.FALL, "増渕賢一郎"),
     ]
-    unpaired = assign_joint_ids(subjects)
-    assert sorted(unpaired) == ["A2", "B2"]
+    assert assign_joint_ids(subjects) == []
     assert subjects[0].joint_id is None
+    assert subjects[1].joint_id is None
+
+
+def test_lone_joint_subject_is_normal():
+    # その教員のコマが片方の学科にしかないゼミ。相手がいないので単独のまま
+    subjects = [
+        _subject("A3", "卒業研究Ⅰ", Department.ACCOUNTING, Term.SPRING, "神山直規"),
+    ]
+    assert assign_joint_ids(subjects) == []
+    assert subjects[0].joint_id is None
+
+
+def test_flag_mismatch_is_reported():
+    # 同じ科目・教員・開講期なのに会計側だけフラグが無い＝付け忘れ
+    subjects = [
+        _subject("B4", "アート表現", Department.MANAGEMENT, Term.FALL, "前沢知子"),
+        _subject("A4", "アート表現", Department.ACCOUNTING, Term.FALL, "前沢知子", is_joint=False),
+    ]
+    assert assign_joint_ids(subjects) == ["A4"]
+    assert subjects[0].joint_id is None
+
+
+def test_extra_section_in_the_same_department_is_not_a_mismatch():
+    # 育児と介護は経営に2クラスあり、B2 のみ会計と合同。B1 は単独クラスで正常
+    subjects = [
+        _subject("A9", "育児と介護", Department.ACCOUNTING, Term.SPRING, "石坂公俊"),
+        _subject("B1", "育児と介護", Department.MANAGEMENT, Term.SPRING, "石坂公俊",
+                 is_joint=False),
+        _subject("B2", "育児と介護", Department.MANAGEMENT, Term.SPRING, "石坂公俊"),
+    ]
+    assert assign_joint_ids(subjects) == []
+    assert subjects[0].joint_id == subjects[2].joint_id
     assert subjects[1].joint_id is None
 
 
 def test_non_joint_subjects_are_ignored():
     subjects = [
-        _subject("A3", "簿記論", Department.ACCOUNTING, Term.SPRING, "松田流輝", is_joint=False),
-        _subject("B3", "簿記論", Department.MANAGEMENT, Term.SPRING, "松田流輝", is_joint=False),
+        _subject("A5", "簿記論", Department.ACCOUNTING, Term.SPRING, "松田流輝", is_joint=False),
+        _subject("B5", "簿記論", Department.MANAGEMENT, Term.SPRING, "松田流輝", is_joint=False),
+    ]
+    assert assign_joint_ids(subjects) == []
+    assert subjects[0].joint_id is None
+
+
+def test_junior_college_is_outside_the_joint_scope():
+    # 合同(経・会) 列は大学シートにしかない。短大は同名・同教員でも対象外
+    subjects = [
+        _subject("A6", "マーケティングプロジェクト", Department.ACCOUNTING, Term.SPRING, "増渕賢一郎"),
+        _subject("J6", "マーケティングプロジェクト", Department.JUNIOR, Term.SPRING, "増渕賢一郎",
+                 is_joint=False),
     ]
     assert assign_joint_ids(subjects) == []
     assert subjects[0].joint_id is None
@@ -1506,22 +1560,33 @@ def test_non_joint_subjects_are_ignored():
 
 def test_joint_ids_are_distinct_between_groups():
     subjects = [
-        _subject("A4", "科目甲", Department.ACCOUNTING, Term.SPRING, "教員甲"),
-        _subject("B4", "科目甲", Department.MANAGEMENT, Term.SPRING, "教員甲"),
-        _subject("A5", "科目乙", Department.ACCOUNTING, Term.SPRING, "教員乙"),
-        _subject("B5", "科目乙", Department.MANAGEMENT, Term.SPRING, "教員乙"),
+        _subject("A7", "科目甲", Department.ACCOUNTING, Term.SPRING, "教員甲"),
+        _subject("B7", "科目甲", Department.MANAGEMENT, Term.SPRING, "教員甲"),
+        _subject("A8", "科目乙", Department.ACCOUNTING, Term.SPRING, "教員乙"),
+        _subject("B8", "科目乙", Department.MANAGEMENT, Term.SPRING, "教員乙"),
     ]
     assign_joint_ids(subjects)
     assert subjects[0].joint_id != subjects[2].joint_id
 
 
-def test_real_workbook_pairs_most_joint_subjects():
+def test_paired_members_always_span_both_departments():
     subjects = read_curriculum(CURRICULUM_XLSX)
-    unpaired = assign_joint_ids(subjects)
-    paired = [s for s in subjects if s.joint_id is not None]
-    # 合同=○ は 26 件。マーケティングプロジェクト 2 件のみ開講期違いで不成立
-    assert len(paired) == 24
-    assert len(unpaired) == 2
+    assign_joint_ids(subjects)
+
+    groups: dict[str, set] = {}
+    for subject in subjects:
+        if subject.joint_id:
+            groups.setdefault(subject.joint_id, set()).add(subject.department)
+    assert groups
+    assert all(
+        departments == {Department.MANAGEMENT, Department.ACCOUNTING}
+        for departments in groups.values()
+    )
+
+
+def test_real_workbook_has_no_flag_mismatch():
+    subjects = read_curriculum(CURRICULUM_XLSX)
+    assert assign_joint_ids(subjects) == []
 ```
 
 - [ ] **Step 2: テストを実行して失敗することを確認する**
@@ -1536,38 +1601,54 @@ Expected: FAIL（`ModuleNotFoundError: No module named 'app.ingest.joint_pairing
 ```python
 """経営学科と会計学科で合同開講される科目を対応付ける。
 
-対応付けの鍵は base_name + teacher + term。開講期がずれている
-組（マーケティングプロジェクトなど）は成立しないため、警告に回す。
+合同=○ は科目が合同開講であることを示すフラグで、実際の対応付けは
+教員単位で成立する。片方の学科にしかコマがない教員は単独のままが正常。
+
+一方、同じ鍵の科目が他学科にあるのに片方だけフラグが付いている場合は
+付け忘れの可能性が高いので、その科目コードを返して警告に回す。
 """
 from collections import defaultdict
 
+from app.models.enums import Department
 from app.models.subject import Subject
+
+JOINT_DEPARTMENTS = (Department.MANAGEMENT, Department.ACCOUNTING)
+"""合同開講の対象学科。合同(経・会) 列は大学シートにしか存在しない。"""
 
 
 def assign_joint_ids(subjects: list[Subject]) -> list[str]:
-    """合同=○ の科目に joint_id を付与し、不成立の科目コードを返す。
+    """合同科目に joint_id を付与し、フラグ付け忘れの科目コードを返す。
 
     subjects の joint_id を破壊的に書き換える。
     """
     groups: dict[tuple[str, str, str], list[Subject]] = defaultdict(list)
     for subject in subjects:
-        if not subject.is_joint:
+        if subject.department not in JOINT_DEPARTMENTS:
             continue
         key = (subject.base_name, subject.teacher, subject.term.value)
         groups[key].append(subject)
 
-    unpaired: list[str] = []
+    mismatches: list[str] = []
     for index, key in enumerate(sorted(groups), start=1):
         members = groups[key]
-        departments = {member.department for member in members}
-        if len(members) < 2 or len(departments) < 2:
-            unpaired.extend(member.code for member in members)
+        flagged_departments = {m.department for m in members if m.is_joint}
+        if not flagged_departments:
             continue
-        joint_id = f"J{index:03d}"
-        for member in members:
-            member.joint_id = joint_id
 
-    return unpaired
+        if len(flagged_departments) >= 2:
+            joint_id = f"J{index:03d}"
+            for member in members:
+                if member.is_joint:
+                    member.joint_id = joint_id
+
+        # フラグの付いたクラスが 1 つも無い学科だけが付け忘れの疑い。
+        # 同一学科に複数クラスあり片方だけ合同、という構造は正常。
+        mismatches.extend(
+            member.code for member in members
+            if member.department not in flagged_departments
+        )
+
+    return sorted(mismatches)
 ```
 
 - [ ] **Step 4: テストを実行して通ることを確認する**
@@ -1594,7 +1675,7 @@ git commit -m "feat: 合同科目のペアリングを追加"
 - Consumes: Task 3 の `Subject` / `Teacher`、Task 7 の `assign_joint_ids`
 - Produces:
   - `Warning` — frozen dataclass `(kind: str, message: str, subject_code: str | None, teacher_name: str | None)`
-  - `collect_warnings(subjects, teachers, unpaired_joint_codes) -> list[Warning]`
+  - `collect_warnings(subjects, teachers, joint_flag_mismatch_codes) -> list[Warning]`
 
 **警告の種類（`kind` の値）:**
 
@@ -1602,9 +1683,11 @@ git commit -m "feat: 合同科目のペアリングを追加"
 |---|---|
 | `unknown_teacher` | 担当教員が教員一覧に存在しない |
 | `missing_availability` | 担当科目があるのに非常勤の出勤可能コマが空 |
-| `unpaired_joint` | 合同=○ だがペアが成立しない |
+| `joint_flag_mismatch` | 同じ科目・教員・開講期の科目が他学科にあるのに、片方だけ合同フラグが付いている |
 | `missing_course` | 選択必修なのにコース列が空 |
 | `partial_slot` | 曜日と時限の片方だけが入力されている |
+
+単独の合同科目（その教員のコマが片方の学科にしかない）は正常であり、警告を出さない。
 
 - [ ] **Step 1: 失敗するテストを書く**
 
@@ -1661,10 +1744,10 @@ def test_full_time_without_availability_is_clean():
     assert collect_warnings([_subject()], teachers, []) == []
 
 
-def test_unpaired_joint_is_reported():
+def test_joint_flag_mismatch_is_reported():
     teachers = {"教員甲": Teacher("教員甲", TeacherKind.FULL_TIME)}
     warnings = collect_warnings([_subject(code="A9")], teachers, ["A9"])
-    assert _kinds(warnings) == ["unpaired_joint"]
+    assert _kinds(warnings) == ["joint_flag_mismatch"]
     assert warnings[0].subject_code == "A9"
 
 
@@ -1719,12 +1802,12 @@ class Warning:
 def collect_warnings(
     subjects: list[Subject],
     teachers: dict[str, Teacher],
-    unpaired_joint_codes: list[str],
+    joint_flag_mismatch_codes: list[str],
 ) -> list[Warning]:
     warnings: list[Warning] = []
     seen_unknown: set[str] = set()
     seen_missing_availability: set[str] = set()
-    unpaired = set(unpaired_joint_codes)
+    mismatches = set(joint_flag_mismatch_codes)
 
     for subject in subjects:
         teacher = teachers.get(subject.teacher)
@@ -1749,10 +1832,13 @@ def collect_warnings(
                 teacher_name=teacher.name,
             ))
 
-        if subject.code in unpaired:
+        if subject.code in mismatches:
             warnings.append(Warning(
-                kind="unpaired_joint",
-                message=f"合同科目のペアが成立しません: {subject.name}",
+                kind="joint_flag_mismatch",
+                message=(
+                    f"他学科に同じ科目・教員・開講期の科目がありますが、"
+                    f"合同フラグが付いていません: {subject.name}"
+                ),
                 subject_code=subject.code,
             ))
 
@@ -3881,9 +3967,9 @@ def run_pipeline(
 ) -> GenerationResult:
     logger.info(f"生成を開始します（モード: {mode.value}）", stage="Stage 0")
 
-    unpaired = assign_joint_ids(subjects)
+    joint_mismatches = assign_joint_ids(subjects)
     context = Context.from_lists(subjects, teachers)
-    warnings = collect_warnings(subjects, context.teachers, unpaired)
+    warnings = collect_warnings(subjects, context.teachers, joint_mismatches)
     for warning in warnings:
         logger.warn(warning.message, stage="Stage 0")
     logger.info(
@@ -6185,8 +6271,8 @@ async def upload(
         raise HTTPException(status_code=400, detail=str(error)) from error
 
     teacher_map = read_teachers(_persist(teachers))
-    unpaired = assign_joint_ids(subjects)
-    warnings = collect_warnings(subjects, teacher_map, unpaired)
+    joint_mismatches = assign_joint_ids(subjects)
+    warnings = collect_warnings(subjects, teacher_map, joint_mismatches)
 
     previous_entries = {}
     previous_teacher_map = {}
