@@ -1041,7 +1041,10 @@ git commit -m "feat: 教員一覧 Excel の読み取りを追加"
 - ▲科目は同一授業コードで 2 行に分かれている。1 件の `Subject` に集約し `slots_required=2` とする
 - `requires_consecutive` は既定で `True`。`subject_overrides.json` に列挙された `base_name` のみ `False`（現状は `プレゼミナール` のみ）
 - `曜日 == "集中"` または `時限 == 99` の行は `is_intensive=True` とし、`fixed_slot` は付けない
-- `コース` 列と `遠隔` 列は未整備のシートがあるため、**列が存在しない場合も落ちない**こと。`コース` が無ければ空リスト、`遠隔` が無ければ `False`
+- **コース列の見出しはシートによって異なる。**大学シートは `コース`、短大シートは `フィールド`（本学の呼称に合わせた事務局の命名）。リーダーは両方を受け入れ、どちらも `Subject.courses` に入れる
+- 列が存在しない場合も落ちないこと。コース列が無ければ空リスト、`遠隔` が無ければ `False`
+- 複数コースに属する科目は全角読点区切り（例：`経営、観光まちづくり`）。`_parse_courses` が読点と半角カンマの両方を扱う
+- 会計学科にはコースも選択必修も存在しない（コース列は全行空）。これは設計どおりで、欠損ではない
 - 短大の `備考` 列がクオーター（前①など）を持つ
 
 - [ ] **Step 1: 設定ファイルを作成する**
@@ -1137,6 +1140,9 @@ ACCOUNTING_SUFFIX = ":会"
 RETAKE_MARKER = "【再】"
 INTENSIVE_DAY = "集中"
 
+COURSE_COLUMN_NAMES = ("コース", "フィールド")
+"""コース列の見出し。大学は「コース」、短大は「フィールド」と呼ぶ。"""
+
 
 def _load_json(filename: str, fallback):
     path = _CONFIG_DIR / filename
@@ -1199,6 +1205,14 @@ def _is_intensive(day_value, period_value) -> bool:
     if period_value in (None, ""):
         return False
     return int(period_value) == INTENSIVE_PERIOD
+
+
+def _course_cell(row: tuple, columns: dict[str, int]):
+    """シートごとに異なるコース列の見出しを吸収する。"""
+    for name in COURSE_COLUMN_NAMES:
+        if name in columns:
+            return _cell(row, columns, name)
+    return None
 
 
 def _parse_courses(value) -> list[str]:
@@ -1264,7 +1278,7 @@ def read_curriculum(path: str | Path) -> list[Subject]:
                 term=Term(str(_cell(row, columns, "開講期間")).strip()),
                 quarter=_parse_quarter(_cell(row, columns, "備考")),
                 category=Category(str(_cell(row, columns, "科目区分")).strip()),
-                courses=_parse_courses(_cell(row, columns, "コース")),
+                courses=_parse_courses(_course_cell(row, columns)),
                 teacher=normalize_name(_cell(row, columns, "教員氏名")),
                 is_remote=str(_cell(row, columns, "遠隔") or "").strip() == "○",
                 is_joint=str(_cell(row, columns, "合同(経・会)") or "").strip() == "○",
@@ -1313,7 +1327,8 @@ def test_pre_seminar_is_the_non_consecutive_exception():
     assert pre_seminar.slots_required == 2
     assert pre_seminar.requires_consecutive is False
     assert pre_seminar.is_seminar is True
-    assert set(pre_seminar.fixed_slot) == {TimeSlot("火", 2), TimeSlot("木", 2)}
+    # 事務局が曜日・時限を空にしたため確定枠は無く、システムが配置する
+    assert pre_seminar.fixed_slot is None
 
 
 def test_intensive_subject_has_no_fixed_slot():
@@ -1330,9 +1345,48 @@ def test_retake_subject_shares_base_name_with_original():
     assert subjects["A50206"].is_seminar is True
 
 
-def test_missing_course_column_yields_empty_list():
+def test_university_courses_are_read_including_multi_course_subjects():
     subjects = read_curriculum(CURRICULUM_XLSX)
-    assert all(s.courses == [] for s in subjects)
+    management = {
+        course for s in subjects
+        if s.department is Department.MANAGEMENT for course in s.courses
+    }
+    assert {"経営", "情報", "観光まちづくり"} <= management
+
+    # 複数コース所属は全角読点区切りで書かれている
+    multi = [s for s in subjects if len(s.courses) > 1]
+    assert multi
+    assert all(len(s.courses) == len(set(s.courses)) for s in multi)
+
+
+def test_junior_courses_are_read_from_the_field_column():
+    subjects = read_curriculum(CURRICULUM_XLSX)
+    junior = {
+        course for s in subjects
+        if s.department is Department.JUNIOR for course in s.courses
+    }
+    assert {"経営", "情報デザイン", "グローバルコミュニケーション"} <= junior
+
+
+def test_every_elective_required_subject_has_a_course():
+    subjects = read_curriculum(CURRICULUM_XLSX)
+    elective_required = [s for s in subjects if s.category is Category.ELECTIVE_REQUIRED]
+    assert len(elective_required) == 105  # 経営58 + 短大47
+    assert all(s.courses for s in elective_required)
+
+
+def test_accounting_has_no_courses_by_design():
+    subjects = read_curriculum(CURRICULUM_XLSX)
+    accounting = [s for s in subjects if s.department is Department.ACCOUNTING]
+    assert accounting
+    assert all(s.courses == [] for s in accounting)
+    assert not [s for s in accounting if s.category is Category.ELECTIVE_REQUIRED]
+
+
+def test_junior_remote_flag_is_read():
+    subjects = read_curriculum(CURRICULUM_XLSX)
+    remote = [s for s in subjects if s.department is Department.JUNIOR and s.is_remote]
+    assert len(remote) == 13
 
 
 def test_department_and_category_are_parsed():
@@ -1347,7 +1401,7 @@ def test_department_and_category_are_parsed():
 - [ ] **Step 7: テストを実行する**
 
 Run: `cd backend && ../.venv/bin/pytest tests/test_curriculum_reader.py -v`
-Expected: PASS（11 件）。件数が合わない場合は実データを確認して期待値を実データに合わせる。
+Expected: PASS（15 件）。件数が合わない場合は実データを確認し、確認結果を報告した上で期待値を実データに合わせる。
 
 - [ ] **Step 8: コミットする**
 
