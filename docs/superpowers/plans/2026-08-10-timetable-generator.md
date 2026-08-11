@@ -1992,6 +1992,30 @@ def test_h1_allows_non_overlapping_quarters():
     assert check_h1(ctx, tt, b, (TimeSlot("月", 1),)) == []
 
 
+def test_h1_exempts_joint_pairs():
+    # 合同ペアは物理的に1つの授業。H4 が同一コマを要求するため H1 は無視する
+    a = make_subject("A1", department=Department.ACCOUNTING)
+    b = make_subject("B1", department=Department.MANAGEMENT)
+    a.joint_id = b.joint_id = "J001"
+    ctx = build([a, b], [Teacher("教員甲", TeacherKind.FULL_TIME)])
+    tt = Timetable()
+    tt.place("A1", (TimeSlot("月", 1),), AssignmentSource.PRELOCK)
+
+    assert check_h1(ctx, tt, b, (TimeSlot("月", 1),)) == []
+
+
+def test_h1_still_flags_a_different_joint_group():
+    a = make_subject("A1", department=Department.ACCOUNTING)
+    b = make_subject("B1", department=Department.MANAGEMENT)
+    a.joint_id = "J001"
+    b.joint_id = "J002"
+    ctx = build([a, b], [Teacher("教員甲", TeacherKind.FULL_TIME)])
+    tt = Timetable()
+    tt.place("A1", (TimeSlot("月", 1),), AssignmentSource.PRELOCK)
+
+    assert [v.rule_id for v in check_h1(ctx, tt, b, (TimeSlot("月", 1),))] == ["H1"]
+
+
 def test_h1_ignores_the_subjects_own_existing_placement():
     a = make_subject("A1")
     ctx = build([a], [Teacher("教員甲", TeacherKind.FULL_TIME)])
@@ -2167,10 +2191,18 @@ MAX_CONSECUTIVE = 2
 def check_h1(
     context: Context, timetable: Timetable, subject: Subject, slots: tuple[TimeSlot, ...]
 ) -> list[Violation]:
-    """同一教員が同曜日・同時限に別科目を持たない（全学科横断）。"""
+    """同一教員が同曜日・同時限に別科目を持たない（全学科横断）。
+
+    合同ペアは 2 行に分かれていても物理的に 1 つの授業で、担当教員も
+    同一である。H4 が同一コマへの配置を要求するため、joint_id が一致
+    する相手は衝突とみなさない。除外しないと H1 と H4 が矛盾し、
+    合同科目を一切配置できなくなる。
+    """
     violations: list[Violation] = []
     for slot in slots:
         for other in others_at(context, timetable, slot, subject.code):
+            if subject.joint_id and other.joint_id == subject.joint_id:
+                continue
             if other.teacher and other.teacher == subject.teacher:
                 violations.append(Violation(
                     rule_id="H1",
