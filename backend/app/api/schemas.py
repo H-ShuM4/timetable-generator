@@ -40,3 +40,53 @@ class SettingsIn(BaseModel):
 
 class ApiKeyIn(BaseModel):
     api_key: str = Field(min_length=1)
+
+
+class GenerateIn(BaseModel):
+    mode: str = Field(pattern="^(mock|optimize|inherit)$")
+    retarget_codes: list[str] = Field(default_factory=list)
+
+
+class RetargetItem(BaseModel):
+    code: str
+    name: str
+    teacher: str
+    reason: str
+
+
+class ViolationOut(BaseModel):
+    rule_id: str
+    subject_code: str
+    message: str
+    related_code: str | None = None
+
+
+class PlacementOut(BaseModel):
+    code: str
+    name: str
+    teacher: str
+    department: str
+    year: int
+    term: str
+    quarter: str | None
+    category: str
+    slots: list[str]
+    source: str
+
+
+class ResultOut(BaseModel):
+    status: str
+    placements: list[PlacementOut]
+    unplaced: list[str]
+    violations: list[ViolationOut]
+    intensive: list[str]
+
+
+class MoveIn(BaseModel):
+    code: str
+    slots: list[str] = Field(min_length=1)
+
+
+class MoveOut(BaseModel):
+    applied: bool
+    violations: list[ViolationOut]
