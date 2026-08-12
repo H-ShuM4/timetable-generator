@@ -3626,10 +3626,15 @@ git commit -m "feat: Stage 5 のバックトラッキングソルバーを追加
     - `.info(message, stage=None)` / `.warn(...)` / `.error(...)`
     - `.events -> list[LogEvent]`
     - `.subscribe() -> queue.SimpleQueue` — SSE 配信用。以降のイベントが流れる
-    - `.close()` — 購読者に終了を示す `None` を送り、ファイルを閉じる
+    - `.close()` — 購読者に終了を示す `None` を送り、ファイルを閉じる。二度呼んでも安全
     - `.log_path -> Path`
 
 **設計上の注意:** 生成処理は FastAPI のワーカースレッドで動くため、イベントの追加はロックで保護する。購読者への配信は `queue.SimpleQueue`（スレッドセーフ）を使う。
+
+**閉鎖後の挙動（重要）:** `close()` は生成の終了を意味するが、その後も呼び出しは起こりうる。
+
+- **`subscribe()` を閉鎖後に呼ぶ**：生成が速く終わった直後にブラウザが SSE へ接続すると発生する。このとき終了済みであることを即座に伝えないと、SSE 側は永久に待ち続ける。閉鎖後の `subscribe()` は、**あらかじめ `None` を入れたキュー**を返す
+- **`log()` を閉鎖後に呼ぶ**：ワーカーがエラー経路で遅れてイベントを出すと発生する。ファイルは既に閉じているため、閉鎖後の `log()` は**何もしない**（例外を投げない）
 
 - [ ] **Step 1: 失敗するテストを書く**
 
@@ -3698,6 +3703,36 @@ def test_timestamp_is_iso_format(tmp_path):
     logger.info("x")
     datetime.fromisoformat(logger.events[0].timestamp)
     logger.close()
+
+
+def test_subscribing_after_close_receives_the_sentinel_immediately(tmp_path):
+    # 生成が速く終わった直後に SSE が接続してくる場面。待たせてはいけない
+    logger = SessionLogger("s7", log_dir=tmp_path)
+    logger.info("開始")
+    logger.close()
+
+    stream = logger.subscribe()
+    assert stream.get(timeout=1) is None
+
+
+def test_logging_after_close_is_ignored(tmp_path):
+    # ワーカーがエラー経路で遅れてイベントを出しても例外にしない
+    logger = SessionLogger("s8", log_dir=tmp_path)
+    logger.info("開始")
+    logger.close()
+
+    logger.error("後始末中のエラー")  # 例外を投げないこと
+    assert [e.message for e in logger.events] == ["開始"]
+
+
+def test_close_is_idempotent(tmp_path):
+    logger = SessionLogger("s9", log_dir=tmp_path)
+    stream = logger.subscribe()
+    logger.close()
+    logger.close()
+
+    assert stream.get(timeout=1) is None
+    assert stream.empty()
 ```
 
 - [ ] **Step 2: テストを実行して失敗することを確認する**
@@ -3750,6 +3785,7 @@ class SessionLogger:
         self._events: list[LogEvent] = []
         self._subscribers: list[queue.SimpleQueue] = []
         self._lock = threading.Lock()
+        self._closed = False
         self._file = self.log_path.open("a", encoding="utf-8")
 
     @property
@@ -3758,13 +3794,25 @@ class SessionLogger:
             return list(self._events)
 
     def subscribe(self) -> queue.SimpleQueue:
-        """以降のイベントを受け取るキューを返す。close() で None が届く。"""
+        """以降のイベントを受け取るキューを返す。close() で None が届く。
+
+        既に閉じている場合は None を入れたキューを返す。生成が速く
+        終わった直後に SSE が接続してきても、待ち続けずに済む。
+        """
         stream: queue.SimpleQueue = queue.SimpleQueue()
         with self._lock:
+            if self._closed:
+                stream.put(None)
+                return stream
             self._subscribers.append(stream)
         return stream
 
     def log(self, level: str, message: str, *, stage: str | None = None) -> None:
+        """イベントを記録する。閉じた後の呼び出しは何もしない。
+
+        ワーカーがエラー経路で遅れてイベントを出しても、例外で
+        後始末を壊さないようにするため。
+        """
         event = LogEvent(
             level=level,
             message=message,
@@ -3772,6 +3820,8 @@ class SessionLogger:
             stage=stage,
         )
         with self._lock:
+            if self._closed:
+                return
             self._events.append(event)
             subscribers = list(self._subscribers)
             prefix = f"[{event.timestamp}] {level:<5}"
@@ -3791,7 +3841,11 @@ class SessionLogger:
         self.log("ERROR", message, stage=stage)
 
     def close(self) -> None:
+        """購読者に終了を伝え、ファイルを閉じる。二度呼んでも安全。"""
         with self._lock:
+            if self._closed:
+                return
+            self._closed = True
             subscribers = list(self._subscribers)
             self._subscribers.clear()
             if not self._file.closed:
@@ -3803,7 +3857,7 @@ class SessionLogger:
 - [ ] **Step 4: テストを実行して通ることを確認する**
 
 Run: `cd backend && ../.venv/bin/pytest tests/test_session_logger.py -v`
-Expected: PASS（6 件）
+Expected: PASS（9 件）
 
 - [ ] **Step 5: コミットする**
 
