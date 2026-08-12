@@ -60,3 +60,33 @@ def test_timestamp_is_iso_format(tmp_path):
     logger.info("x")
     datetime.fromisoformat(logger.events[0].timestamp)
     logger.close()
+
+
+def test_subscribing_after_close_receives_the_sentinel_immediately(tmp_path):
+    # 生成が速く終わった直後に SSE が接続してくる場面。待たせてはいけない
+    logger = SessionLogger("s7", log_dir=tmp_path)
+    logger.info("開始")
+    logger.close()
+
+    stream = logger.subscribe()
+    assert stream.get(timeout=1) is None
+
+
+def test_logging_after_close_is_ignored(tmp_path):
+    # ワーカーがエラー経路で遅れてイベントを出しても例外にしない
+    logger = SessionLogger("s8", log_dir=tmp_path)
+    logger.info("開始")
+    logger.close()
+
+    logger.error("後始末中のエラー")  # 例外を投げないこと
+    assert [e.message for e in logger.events] == ["開始"]
+
+
+def test_close_is_idempotent(tmp_path):
+    logger = SessionLogger("s9", log_dir=tmp_path)
+    stream = logger.subscribe()
+    logger.close()
+    logger.close()
+
+    assert stream.get(timeout=1) is None
+    assert stream.empty()

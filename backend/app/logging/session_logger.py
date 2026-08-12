@@ -36,6 +36,7 @@ class SessionLogger:
         self._events: list[LogEvent] = []
         self._subscribers: list[queue.SimpleQueue] = []
         self._lock = threading.Lock()
+        self._closed = False
         self._file = self.log_path.open("a", encoding="utf-8")
 
     @property
@@ -44,13 +45,25 @@ class SessionLogger:
             return list(self._events)
 
     def subscribe(self) -> queue.SimpleQueue:
-        """以降のイベントを受け取るキューを返す。close() で None が届く。"""
+        """以降のイベントを受け取るキューを返す。close() で None が届く。
+
+        既に閉じている場合は None を入れたキューを返す。生成が速く
+        終わった直後に SSE が接続してきても、待ち続けずに済む。
+        """
         stream: queue.SimpleQueue = queue.SimpleQueue()
         with self._lock:
+            if self._closed:
+                stream.put(None)
+                return stream
             self._subscribers.append(stream)
         return stream
 
     def log(self, level: str, message: str, *, stage: str | None = None) -> None:
+        """イベントを記録する。閉じた後の呼び出しは何もしない。
+
+        ワーカーがエラー経路で遅れてイベントを出しても、例外で
+        後始末を壊さないようにするため。
+        """
         event = LogEvent(
             level=level,
             message=message,
@@ -58,6 +71,8 @@ class SessionLogger:
             stage=stage,
         )
         with self._lock:
+            if self._closed:
+                return
             self._events.append(event)
             subscribers = list(self._subscribers)
             prefix = f"[{event.timestamp}] {level:<5}"
@@ -77,7 +92,11 @@ class SessionLogger:
         self.log("ERROR", message, stage=stage)
 
     def close(self) -> None:
+        """購読者に終了を伝え、ファイルを閉じる。二度呼んでも安全。"""
         with self._lock:
+            if self._closed:
+                return
+            self._closed = True
             subscribers = list(self._subscribers)
             self._subscribers.clear()
             if not self._file.closed:
