@@ -133,15 +133,22 @@ def parse_placement_response(text: str) -> dict[str, tuple[TimeSlot, ...]]:
     except json.JSONDecodeError as error:
         raise ValueError(f"応答を JSON として解釈できません: {error}") from error
 
+    # 応答は信用できない入力なので、形が違えば必ず ValueError にする。
+    # 黙って読み飛ばすと科目が時間割から消えたことに誰も気付けない。
+    if not isinstance(payload, dict):
+        raise ValueError(f"応答がオブジェクトではありません: {type(payload).__name__}")
+
     placements = payload.get("placements")
     if not isinstance(placements, list):
         raise ValueError("応答に placements 配列がありません")
 
     result: dict[str, tuple[TimeSlot, ...]] = {}
     for item in placements:
+        if not isinstance(item, dict):
+            raise ValueError(f"placements の要素が不正です: {item!r}")
         code = str(item.get("code", "")).strip()
-        slots = item.get("slots") or []
-        if not code or not isinstance(slots, list):
+        slots = item.get("slots")
+        if not code or not isinstance(slots, list) or not slots:
             raise ValueError(f"placements の要素が不正です: {item!r}")
         result[code] = tuple(parse_slot_label(label) for label in slots)
     return result

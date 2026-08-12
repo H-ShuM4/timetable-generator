@@ -111,6 +111,23 @@ def test_parse_response_raises_on_invalid_slot_label():
         parse_placement_response(payload)
 
 
+@pytest.mark.parametrize("payload", [
+    "[]",                                              # 最上位が配列
+    '"placements"',                                    # 最上位が文字列
+    "{}",                                              # placements が無い
+    '{"placements": null}',                            # placements が配列でない
+    '{"placements": ["A1"]}',                          # 要素がオブジェクトでない
+    '{"placements": [{"code": "A1"}]}',                # slots キーが無い
+    '{"placements": [{"code": "A1", "slots": []}]}',   # slots が空
+    '{"placements": [{"code": "A1", "slots": "月1"}]}',  # slots が配列でない
+    '{"placements": [{"code": "", "slots": ["月1"]}]}',  # code が空
+])
+def test_parse_response_rejects_malformed_payloads(payload):
+    # 黙って読み飛ばすと科目が時間割から消える。必ず ValueError にする
+    with pytest.raises(ValueError):
+        parse_placement_response(payload)
+
+
 def test_response_schema_declares_placements():
     assert RESPONSE_SCHEMA["type"] == "object"
     assert "placements" in RESPONSE_SCHEMA["properties"]
