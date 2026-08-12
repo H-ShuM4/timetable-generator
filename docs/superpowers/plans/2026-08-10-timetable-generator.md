@@ -135,10 +135,10 @@ httpx>=0.28
 testpaths = tests
 pythonpath = .
 filterwarnings =
-    ignore:Using `httpx` with `starlette.testclient` is deprecated:DeprecationWarning
+    ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning
 ```
 
-`filterwarnings` は FastAPI の `TestClient` が出す 1 件だけを対象にする。この警告は依存ライブラリ側の事情で、こちらのコードでは解消できない。全タスクで「警告なし」を検証基準にしているため、ここを曖昧にすると以降の検証が意味を失う。
+`filterwarnings` は FastAPI の `TestClient` が出す 1 件だけを対象にする。カテゴリは `StarletteDeprecationWarning` を明示すること。この警告クラスは名前に反して `UserWarning` を継承しているため、`DeprecationWarning` を指定しても抑制されない。この警告は依存ライブラリ側の事情で、こちらのコードでは解消できない。全タスクで「警告なし」を検証基準にしているため、ここを曖昧にすると以降の検証が意味を失う。
 
 - [ ] **Step 6: 空の `__init__.py` を 2 つ作成する**
 
