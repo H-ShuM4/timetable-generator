@@ -19,8 +19,17 @@ MARKDOWN_PREVIEW_CHARS = 2000
 
 
 def has_expected_columns(path: str | Path) -> bool:
-    """いずれかのシートが必須列をすべて備えているか。"""
-    workbook = openpyxl.load_workbook(path, data_only=True, read_only=True)
+    """いずれかのシートが必須列をすべて備えているか。
+
+    Excel として開けないファイルは False を返す。壊れたファイルや
+    別形式のファイルも「想定外の形式」として同じ経路に載せ、内容を
+    ログに見せてから止めるため。ここで例外を漏らすと、生成が
+    スタックトレースで落ちてログに何も残らない。
+    """
+    try:
+        workbook = openpyxl.load_workbook(path, data_only=True, read_only=True)
+    except Exception:
+        return False
     try:
         for sheet in workbook.worksheets:
             for row in sheet.iter_rows(min_row=1, max_row=1, values_only=True):

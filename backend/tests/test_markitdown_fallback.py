@@ -54,6 +54,20 @@ def test_fallback_raises_and_logs_for_broken_workbook(tmp_path):
     logger.close()
 
 
+def test_unreadable_file_is_rejected_with_a_log(tmp_path):
+    # 「間違ったファイルを投入した」場面。落ちずに内容を見せて止める
+    path = tmp_path / "garbage.xlsx"
+    path.write_bytes(b"this is not a workbook")
+    logger = SessionLogger("m3", log_dir=tmp_path)
+
+    assert has_expected_columns(path) is False
+    with pytest.raises(ValueError, match="想定外"):
+        read_curriculum_with_fallback(path, logger)
+
+    assert any(e.level == "ERROR" for e in logger.events)
+    logger.close()
+
+
 def test_convert_to_markdown_returns_text(tmp_path):
     path = _write_broken_workbook(tmp_path / "broken.xlsx")
     markdown = convert_to_markdown(path)
