@@ -3569,7 +3569,7 @@ def solve(
 - [ ] **Step 4: テストを実行して通ることを確認する**
 
 Run: `cd backend && ../.venv/bin/pytest tests/test_solver.py -v`
-Expected: PASS（12 件）
+Expected: PASS（11 件）
 
 - [ ] **Step 5: 実データ規模で完走することを確認する**
 
