@@ -17,7 +17,12 @@ def _same_cohort(a: Subject, b: Subject) -> bool:
 def check_h2(
     context: Context, timetable: Timetable, subject: Subject, slots: tuple[TimeSlot, ...]
 ) -> list[Violation]:
-    """必修同士が衝突しない（学科 × 年次）。同一ゼミ科目は除外。"""
+    """必修同士が衝突しない（学科 × 年次）。同一科目の複数クラスは除外。
+
+    担当教員ごとにクラスが分かれていても、学生が履修するのはそのうち
+    一つなので同一コマに集約してよい。ゼミ科目に限らず、英語Ⅰや
+    商業簿記Ⅰ のような複数クラス開講の通常科目も同じ扱いになる。
+    """
     if subject.category is not Category.REQUIRED:
         return []
 
@@ -28,11 +33,7 @@ def check_h2(
                 continue
             if not _same_cohort(subject, other):
                 continue
-            if (
-                subject.is_seminar
-                and other.is_seminar
-                and subject.base_name == other.base_name
-            ):
+            if subject.base_name == other.base_name:
                 continue
             violations.append(Violation(
                 rule_id="H2",

@@ -52,9 +52,32 @@ def test_h2_allows_same_seminar_with_different_teachers():
     assert check_h2(ctx, tt, b, (TimeSlot("月", 1),)) == []
 
 
+def test_h2_allows_same_non_seminar_course_with_different_teachers():
+    # 英語Ⅰ・情報リテラシーⅠ・商業簿記Ⅰ のような複数クラス開講の通常科目
+    a = make("A1", Category.REQUIRED, base_name="商業簿記Ⅰ", teacher="教員甲")
+    b = make("B1", Category.REQUIRED, base_name="商業簿記Ⅰ", teacher="教員乙")
+    ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
+    assert check_h2(ctx, tt, b, (TimeSlot("月", 1),)) == []
+
+
+def test_h2_allows_retake_section_to_share_with_the_original():
+    # base_name は【再】を除いた名前なので同一科目とみなされる
+    a = make("A1", Category.REQUIRED, base_name="日本語リテラシーⅠ", is_seminar=True)
+    b = make("B1", Category.REQUIRED, base_name="日本語リテラシーⅠ", is_seminar=False)
+    ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
+    assert check_h2(ctx, tt, b, (TimeSlot("月", 1),)) == []
+
+
 def test_h2_flags_two_different_seminars():
     a = make("A1", Category.REQUIRED, base_name="日本語リテラシーⅠ", is_seminar=True)
     b = make("B1", Category.REQUIRED, base_name="プレゼミナール", is_seminar=True)
+    ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
+    assert [v.rule_id for v in check_h2(ctx, tt, b, (TimeSlot("月", 1),))] == ["H2"]
+
+
+def test_h2_flags_two_different_course_names():
+    a = make("A1", Category.REQUIRED, base_name="商業簿記Ⅰ")
+    b = make("B1", Category.REQUIRED, base_name="工業簿記Ⅰ")
     ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
     assert [v.rule_id for v in check_h2(ctx, tt, b, (TimeSlot("月", 1),))] == ["H2"]
 
