@@ -5113,7 +5113,9 @@ git commit -m "feat: Gemini のプロンプト生成と応答解析を追加"
   - `chunk_codes(context, codes) -> list[tuple[str, list[str]]]` — `(チャンク名, コード一覧)`
   - `make_gemini_placer(client, max_retries) -> GeminiPlacer` — Task 15 の `gemini_placer` に渡す
 
-**チャンク分割の鍵:** `(学科, 開講期, ソートしたコース一覧)`。必修と選択はコースが空なので自然に「学科 × 開講期」になり、選択必修だけコースで細分される。
+**チャンク分割の鍵:** `(学科, 年次, 開講期, ソートしたコース一覧)`。必修と選択はコースが空なので「学科 × 年次 × 開講期」になり、選択必修だけコースで細分される。
+
+年次を含めるのは、H2（必修同士）と H3（選択必修同士）がどちらも「学科 × 年次」で判定されるため。年次で切ると各チャンクが互いに衝突しうる科目だけの塊になり、Gemini が考慮すべき範囲とチャンクの範囲が一致する。実データでは必修が最大 70 科目から 22 科目に下がる。
 
 **再試行ループ:** 1 チャンクにつき最大 `max_retries` 回。違反した科目だけを次回の対象に残し、違反理由を `feedback` として渡す。API 例外・JSON 解析失敗も 1 回分の試行として数える。
 
@@ -5182,6 +5184,21 @@ def test_chunk_codes_groups_by_department_and_term():
     chunks = chunk_codes(ctx, [s.code for s in subjects])
     assert len(chunks) == 3
     assert sorted(chunks[0][1]) == ["A1", "A2"]
+
+
+def test_chunk_codes_splits_by_year():
+    # H2/H3 は 学科 × 年次 で衝突を判定するので、年次が違えば別チャンク
+    subjects = [
+        make("A1", year=1),
+        make("A2", year=1),
+        make("A3", year=2),
+    ]
+    ctx = Context.from_lists(subjects, [])
+    chunks = chunk_codes(ctx, [s.code for s in subjects])
+    assert len(chunks) == 2
+    by_size = sorted(chunks, key=lambda c: -len(c[1]))
+    assert sorted(by_size[0][1]) == ["A1", "A2"]
+    assert "1年" in by_size[0][0]
 
 
 def test_chunk_codes_splits_elective_required_by_course():
@@ -5380,7 +5397,12 @@ from app.models.timetable import AssignmentSource, Timetable
 
 
 def chunk_codes(context: Context, codes: list[str]) -> list[tuple[str, list[str]]]:
-    """学科 × 開講期 × コースでチャンクに割る。"""
+    """学科 × 年次 × 開講期 × コースでチャンクに割る。
+
+    年次を鍵に含めるのは、H2 と H3 が「学科 × 年次」で衝突を判定する
+    ためである。年次で切ると各チャンクが互いに衝突しうる科目だけの塊に
+    なり、Gemini が考慮すべき範囲とチャンクの範囲が一致する。
+    """
     groups: dict[tuple, list[str]] = defaultdict(list)
     for code in codes:
         subject = context.subjects.get(code)
@@ -5388,18 +5410,19 @@ def chunk_codes(context: Context, codes: list[str]) -> list[tuple[str, list[str]
             continue
         key = (
             subject.department.value,
+            subject.year,
             subject.term.value,
             tuple(sorted(subject.courses)),
         )
         groups[key].append(code)
 
     chunks: list[tuple[str, list[str]]] = []
-    for key in sorted(groups):
-        department, term, courses = key
-        label = f"{department}・{term}"
+    for key, group_codes in groups.items():
+        department, year, term, courses = key
+        label = f"{department}{year}年・{term}"
         if courses:
             label += f"・{'/'.join(courses)}"
-        chunks.append((label, groups[key]))
+        chunks.append((label, group_codes))
     return chunks
 
 
@@ -5488,7 +5511,7 @@ def make_gemini_placer(client: GeminiClient, max_retries: int):
 - [ ] **Step 5: テストを実行して通ることを確認する**
 
 Run: `cd backend && ../.venv/bin/pytest tests/test_gemini_stage.py -v`
-Expected: PASS（9 件）
+Expected: PASS（10 件）
 
 - [ ] **Step 6: 全テストを実行する**
 
