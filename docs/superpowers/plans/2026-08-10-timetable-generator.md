@@ -5763,14 +5763,11 @@ git commit -m "feat: 時間割表マトリクスの Excel 出力を追加"
 
 ---
 
-### Task 21: MarkItDown フォールバックとダミーデータ生成
+### Task 21: MarkItDown フォールバック
 
 **Files:**
 - Create: `backend/app/ingest/markitdown_fallback.py`
-- Create: `backend/tests/fixtures/__init__.py`
-- Create: `backend/tests/fixtures/make_dummy_data.py`
 - Test: `backend/tests/test_markitdown_fallback.py`
-- Test: `backend/tests/test_dummy_data.py`
 
 **Interfaces:**
 - Consumes: Task 6 の `read_curriculum`
@@ -5779,15 +5776,8 @@ git commit -m "feat: 時間割表マトリクスの Excel 出力を追加"
   - `has_expected_columns(path) -> bool`
   - `convert_to_markdown(path) -> str`
   - `read_curriculum_with_fallback(path, logger) -> list[Subject]`
-  - `make_dummy_curriculum(source, destination) -> Path` — 現行 Excel にコース列・遠隔列・合同フラグを補って書き出す
 
 **フォールバックの方針:** `has_expected_columns` が `False` の場合、MarkItDown で Markdown 化し、その内容をログに残した上で `ValueError` を送出する。Markdown からの自動復元までは行わない。**想定外の形式を黙って誤読するより、内容を見せて止める方が安全**という判断である。
-
-**ダミーデータ:** 合同フラグとコース列が未整備のため、検証用に次の規則で埋める。
-
-- コース: 経営学科は授業コード末尾の数字を 3 で割った余りで 3 コースに割り当て、会計学科は空、短大は同様に 3 フィールドへ割り当て
-- 短大の遠隔: 授業コード末尾が `1` の科目を `○`
-- 合同フラグ: 既存の `合同(経・会)` 列をそのまま使う
 
 - [ ] **Step 1: 失敗するテストを書く（フォールバック）**
 
@@ -5932,169 +5922,16 @@ def read_curriculum_with_fallback(
 Run: `cd backend && ../.venv/bin/pytest tests/test_markitdown_fallback.py -v`
 Expected: PASS（6 件）
 
-- [ ] **Step 5: ダミーデータ生成のテストを書く**
-
-`backend/tests/test_dummy_data.py`:
-
-```python
-from pathlib import Path
-
-from app.ingest.curriculum_reader import read_curriculum
-from app.models.enums import Category, Department
-from tests.fixtures.make_dummy_data import make_dummy_curriculum
-
-CURRICULUM_XLSX = Path(__file__).resolve().parents[2] / "カリキュラム一覧(整形済み).xlsx"
-
-
-def test_dummy_fills_courses_for_elective_required(tmp_path):
-    path = make_dummy_curriculum(CURRICULUM_XLSX, tmp_path / "dummy.xlsx")
-    subjects = read_curriculum(path)
-
-    elective_required = [
-        s for s in subjects
-        if s.category is Category.ELECTIVE_REQUIRED
-        and s.department is not Department.ACCOUNTING
-    ]
-    assert elective_required
-    assert all(s.courses for s in elective_required)
-
-
-def test_dummy_uses_three_courses_per_department(tmp_path):
-    path = make_dummy_curriculum(CURRICULUM_XLSX, tmp_path / "dummy.xlsx")
-    subjects = read_curriculum(path)
-
-    management = {
-        c for s in subjects if s.department is Department.MANAGEMENT for c in s.courses
-    }
-    assert management == {"経営コース", "情報コース", "観光まちづくりコース"}
-
-
-def test_dummy_marks_some_junior_subjects_as_remote(tmp_path):
-    path = make_dummy_curriculum(CURRICULUM_XLSX, tmp_path / "dummy.xlsx")
-    subjects = read_curriculum(path)
-
-    junior_remote = [
-        s for s in subjects if s.department is Department.JUNIOR and s.is_remote
-    ]
-    assert junior_remote
-
-
-def test_dummy_keeps_subject_count(tmp_path):
-    path = make_dummy_curriculum(CURRICULUM_XLSX, tmp_path / "dummy.xlsx")
-    assert len(read_curriculum(path)) == len(read_curriculum(CURRICULUM_XLSX))
-```
-
-- [ ] **Step 6: ダミーデータ生成を実装する**
-
-`backend/tests/fixtures/__init__.py` は空ファイル。
-
-`backend/tests/fixtures/make_dummy_data.py`:
-
-```python
-"""検証用のダミーデータを作る。
-
-コース列と短大の遠隔列は事務局側で整備中のため、現行 Excel から
-機械的に埋めた版を生成して開発とテストに使う。
-"""
-import re
-from pathlib import Path
-
-import openpyxl
-
-COURSES = {
-    "経営": ("経営コース", "情報コース", "観光まちづくりコース"),
-    "短期大学部": (
-        "経営フィールド", "情報デザインフィールド", "グローバルコミュニケーションフィールド"
-    ),
-}
-
-_DIGITS = re.compile(r"(\d+)")
-
-
-def _code_number(code: str) -> int:
-    match = _DIGITS.search(str(code))
-    return int(match.group(1)) if match else 0
-
-
-def make_dummy_curriculum(source: str | Path, destination: str | Path) -> Path:
-    workbook = openpyxl.load_workbook(source)
-
-    for sheet in workbook.worksheets:
-        headers = {
-            str(cell.value).strip(): cell.column
-            for cell in sheet[1] if cell.value is not None
-        }
-        next_column = sheet.max_column + 1
-
-        course_column = headers.get("コース")
-        if course_column is None:
-            course_column = next_column
-            sheet.cell(row=1, column=course_column, value="コース")
-            next_column += 1
-
-        remote_column = headers.get("遠隔")
-        if remote_column is None:
-            remote_column = next_column
-            sheet.cell(row=1, column=remote_column, value="遠隔")
-
-        for row in range(2, sheet.max_row + 1):
-            code = sheet.cell(row=row, column=headers["授業コード"]).value
-            if not code:
-                continue
-            department = str(sheet.cell(row=row, column=headers["学科"]).value).strip()
-            number = _code_number(code)
-
-            options = COURSES.get(department)
-            if options:
-                sheet.cell(
-                    row=row, column=course_column, value=options[number % len(options)]
-                )
-
-            if department == "短期大学部" and number % 10 == 1:
-                sheet.cell(row=row, column=remote_column, value="○")
-
-    target = Path(destination)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    workbook.save(target)
-    return target
-```
-
-- [ ] **Step 7: テストを実行して通ることを確認する**
+- [ ] **Step 5: 全テストを実行する**
 
 Run: `cd backend && ../.venv/bin/pytest tests/ -v`
 Expected: PASS（全件）
 
-- [ ] **Step 8: ダミーデータでパイプライン全体が完走することを確認する**
-
-Run:
+- [ ] **Step 6: コミットする**
 
 ```bash
-cd backend && ../.venv/bin/python -c "
-import sys
-from app.ingest.curriculum_reader import read_curriculum
-from app.ingest.teacher_reader import read_teachers
-from app.logging.session_logger import SessionLogger
-from app.scheduler.pipeline import GenerationMode, run_pipeline
-from tests.fixtures.make_dummy_data import make_dummy_curriculum
-
-path = make_dummy_curriculum('../カリキュラム一覧(整形済み).xlsx', 'data/dummy.xlsx')
-subjects = read_curriculum(path)
-teachers = read_teachers('../教員一覧(整形済み).xlsx')
-logger = SessionLogger('dummy')
-result = run_pipeline(subjects, teachers, GenerationMode.MOCK, logger)
-logger.close()
-print(f'配置 {len(result.timetable.placed_codes())} / 未配置 {len(result.unplaced)} / 違反 {len(result.violations)} / 警告 {len(result.warnings)}')
-print('ログ:', logger.log_path)
-"
-```
-
-Expected: 違反 0 件で完走すること。未配置が出るのは制約が厳しいためで、この時点では許容する。
-
-- [ ] **Step 9: コミットする**
-
-```bash
-git add backend/app/ingest/markitdown_fallback.py backend/tests/fixtures backend/tests/test_markitdown_fallback.py backend/tests/test_dummy_data.py
-git commit -m "feat: MarkItDown フォールバックとダミーデータ生成を追加"
+git add backend/app/ingest/markitdown_fallback.py backend/tests/test_markitdown_fallback.py
+git commit -m "feat: MarkItDown フォールバックを追加"
 ```
 
 ---
