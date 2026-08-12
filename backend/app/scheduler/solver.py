@@ -1,7 +1,8 @@
-"""Stage 5: 決定的なバックトラッキング探索。
+"""Stage 5: 最小残余値ヒューリスティックによる決定的な貪欲配置。
 
 Gemini が収束しなかった科目を確実に埋めるための最終手段。
-探索が発散しないよう node_limit で必ず打ち切り、部分解を返す。
+候補の少ない科目から順に確定させ、置けない科目は未配置として記録して
+先へ進む。必ず有限時間で終わり、部分解を返す。
 """
 from app.constraints.context import Context
 from app.models.timetable import AssignmentSource, Timetable
@@ -19,8 +20,10 @@ def solve(
 ) -> list[str]:
     """codes を timetable に配置し、置けなかったコードを返す。
 
-    既存の配置は動かさない。探索が node_limit に達した場合は、
-    そこまでに置けた分を残して打ち切る。
+    既存の配置は動かさない。毎回「候補が最も少ない科目」を選んで確定
+    させるため、出勤可能コマが 1 つしかない非常勤の科目などが先に決まる。
+    候補が 1 つも無い科目は未配置として記録し、残りの処理を続ける。
+    反復回数が node_limit に達した場合は、そこまでの結果を返す。
     """
     targets = [
         code for code in codes
@@ -28,55 +31,26 @@ def solve(
         and not context.subjects[code].is_intensive
         and not timetable.is_placed(code)
     ]
-    if not targets:
-        return []
 
-    nodes = 0
-    best_placed: dict[str, tuple] = {}
+    unplaced: list[str] = []
+    remaining = list(targets)
+    steps = 0
 
-    def snapshot() -> dict[str, tuple]:
-        return {code: timetable.slot_of(code) for code in targets if timetable.is_placed(code)}
-
-    def search(remaining: list[str]) -> bool:
-        nonlocal nodes, best_placed
-
-        if not remaining:
-            best_placed = snapshot()
-            return True
-        if nodes >= node_limit:
-            return False
-
+    while remaining and steps < node_limit:
+        steps += 1
         options_by_code = {
             code: feasible_slot_sets(context, timetable, context.subjects[code])
             for code in remaining
         }
-        if len(snapshot()) > len(best_placed):
-            best_placed = snapshot()
+        # 候補数が同じ場合は授業コード順にして結果を決定的にする
+        code = min(remaining, key=lambda c: (len(options_by_code[c]), c))
+        remaining.remove(code)
 
-        code = min(remaining, key=lambda c: len(options_by_code[c]))
         options = options_by_code[code]
         if not options:
-            return False
+            unplaced.append(code)
+            continue
+        timetable.place(code, options[0], AssignmentSource.SOLVER)
 
-        rest = [c for c in remaining if c != code]
-        for slots in options:
-            nodes += 1
-            if nodes > node_limit:
-                return False
-            timetable.place(code, slots, AssignmentSource.SOLVER)
-            if search(rest):
-                return True
-            timetable.remove(code)
-        return False
-
-    if search(targets):
-        return []
-
-    # 全体解が見つからなかった場合は、最も多く置けた部分解を復元する
-    for code in targets:
-        if timetable.is_placed(code):
-            timetable.remove(code)
-    for code, slots in best_placed.items():
-        timetable.place(code, slots, AssignmentSource.SOLVER)
-
-    return [code for code in targets if not timetable.is_placed(code)]
+    unplaced.extend(remaining)
+    return unplaced

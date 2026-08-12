@@ -95,3 +95,40 @@ def test_terminates_on_node_limit():
     tt = Timetable()
     unplaced = solve(ctx, tt, [s.code for s in subjects], node_limit=50)
     assert len(tt.placed_codes()) + len(unplaced) == 26
+
+
+def test_stops_at_node_limit_and_reports_the_rest():
+    # 反復上限に達したら、残りは未配置として返す
+    subjects = [make(f"A{i}") for i in range(10)]
+    ctx = Context.from_lists(subjects, [])
+    tt = Timetable()
+    unplaced = solve(ctx, tt, [s.code for s in subjects], node_limit=3)
+    assert len(tt.placed_codes()) == 3
+    assert len(unplaced) == 7
+
+
+def test_a_subject_with_no_options_does_not_block_the_others():
+    # 候補ゼロの科目があっても、残りは配置される
+    blocked = make("A1", teacher="非常勤甲")
+    other = make("A2", teacher="教員乙")
+    teacher = Teacher("非常勤甲", TeacherKind.PART_TIME, available_slots={TimeSlot("月", 1)})
+    ctx = Context.from_lists([blocked, other], [teacher])
+    tt = Timetable()
+    tt.place("A2", (TimeSlot("月", 1),), AssignmentSource.PRELOCK)
+    # 非常勤甲は月1しか出勤できないが、そこは A2 が必修で埋めている
+    unplaced = solve(ctx, tt, ["A1"])
+    assert unplaced == ["A1"]
+    assert tt.is_placed("A2")
+
+
+def test_result_is_deterministic():
+    subjects = [make(f"A{i}") for i in range(8)]
+    codes = [s.code for s in subjects]
+
+    def run(order):
+        ctx = Context.from_lists(subjects, [])
+        tt = Timetable()
+        solve(ctx, tt, order)
+        return {c: tt.slot_of(c) for c in codes}
+
+    assert run(codes) == run(list(reversed(codes)))
