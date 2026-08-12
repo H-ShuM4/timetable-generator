@@ -115,7 +115,7 @@ fastapi>=0.115
 uvicorn[standard]>=0.32
 python-multipart>=0.0.12
 openpyxl>=3.1.5
-markitdown>=0.0.1
+markitdown[xlsx]>=0.1
 google-genai>=1.0
 python-dotenv>=1.0
 pytest>=8.3
@@ -5840,6 +5840,20 @@ def test_fallback_raises_and_logs_for_broken_workbook(tmp_path):
     logger.close()
 
 
+def test_unreadable_file_is_rejected_with_a_log(tmp_path):
+    # 「間違ったファイルを投入した」場面。落ちずに内容を見せて止める
+    path = tmp_path / "garbage.xlsx"
+    path.write_bytes(b"this is not a workbook")
+    logger = SessionLogger("m3", log_dir=tmp_path)
+
+    assert has_expected_columns(path) is False
+    with pytest.raises(ValueError, match="想定外"):
+        read_curriculum_with_fallback(path, logger)
+
+    assert any(e.level == "ERROR" for e in logger.events)
+    logger.close()
+
+
 def test_convert_to_markdown_returns_text(tmp_path):
     path = _write_broken_workbook(tmp_path / "broken.xlsx")
     markdown = convert_to_markdown(path)
@@ -5878,8 +5892,17 @@ MARKDOWN_PREVIEW_CHARS = 2000
 
 
 def has_expected_columns(path: str | Path) -> bool:
-    """いずれかのシートが必須列をすべて備えているか。"""
-    workbook = openpyxl.load_workbook(path, data_only=True, read_only=True)
+    """いずれかのシートが必須列をすべて備えているか。
+
+    Excel として開けないファイルは False を返す。壊れたファイルや
+    別形式のファイルも「想定外の形式」として同じ経路に載せ、内容を
+    ログに見せてから止めるため。ここで例外を漏らすと、生成が
+    スタックトレースで落ちてログに何も残らない。
+    """
+    try:
+        workbook = openpyxl.load_workbook(path, data_only=True, read_only=True)
+    except Exception:
+        return False
     try:
         for sheet in workbook.worksheets:
             for row in sheet.iter_rows(min_row=1, max_row=1, values_only=True):
@@ -5920,7 +5943,7 @@ def read_curriculum_with_fallback(
 - [ ] **Step 4: テストを実行して通ることを確認する**
 
 Run: `cd backend && ../.venv/bin/pytest tests/test_markitdown_fallback.py -v`
-Expected: PASS（6 件）
+Expected: PASS（7 件）
 
 - [ ] **Step 5: 全テストを実行する**
 
