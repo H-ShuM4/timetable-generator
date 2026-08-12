@@ -4893,6 +4893,23 @@ def test_parse_response_raises_on_invalid_slot_label():
         parse_placement_response(payload)
 
 
+@pytest.mark.parametrize("payload", [
+    "[]",                                              # 最上位が配列
+    '"placements"',                                    # 最上位が文字列
+    "{}",                                              # placements が無い
+    '{"placements": null}',                            # placements が配列でない
+    '{"placements": ["A1"]}',                          # 要素がオブジェクトでない
+    '{"placements": [{"code": "A1"}]}',                # slots キーが無い
+    '{"placements": [{"code": "A1", "slots": []}]}',   # slots が空
+    '{"placements": [{"code": "A1", "slots": "月1"}]}',  # slots が配列でない
+    '{"placements": [{"code": "", "slots": ["月1"]}]}',  # code が空
+])
+def test_parse_response_rejects_malformed_payloads(payload):
+    # 黙って読み飛ばすと科目が時間割から消える。必ず ValueError にする
+    with pytest.raises(ValueError):
+        parse_placement_response(payload)
+
+
 def test_response_schema_declares_placements():
     assert RESPONSE_SCHEMA["type"] == "object"
     assert "placements" in RESPONSE_SCHEMA["properties"]
@@ -5045,15 +5062,22 @@ def parse_placement_response(text: str) -> dict[str, tuple[TimeSlot, ...]]:
     except json.JSONDecodeError as error:
         raise ValueError(f"応答を JSON として解釈できません: {error}") from error
 
+    # 応答は信用できない入力なので、形が違えば必ず ValueError にする。
+    # 黙って読み飛ばすと科目が時間割から消えたことに誰も気付けない。
+    if not isinstance(payload, dict):
+        raise ValueError(f"応答がオブジェクトではありません: {type(payload).__name__}")
+
     placements = payload.get("placements")
     if not isinstance(placements, list):
         raise ValueError("応答に placements 配列がありません")
 
     result: dict[str, tuple[TimeSlot, ...]] = {}
     for item in placements:
+        if not isinstance(item, dict):
+            raise ValueError(f"placements の要素が不正です: {item!r}")
         code = str(item.get("code", "")).strip()
-        slots = item.get("slots") or []
-        if not code or not isinstance(slots, list):
+        slots = item.get("slots")
+        if not code or not isinstance(slots, list) or not slots:
             raise ValueError(f"placements の要素が不正です: {item!r}")
         result[code] = tuple(parse_slot_label(label) for label in slots)
     return result
@@ -5062,7 +5086,7 @@ def parse_placement_response(text: str) -> dict[str, tuple[TimeSlot, ...]]:
 - [ ] **Step 4: テストを実行して通ることを確認する**
 
 Run: `cd backend && ../.venv/bin/pytest tests/test_prompts.py -v`
-Expected: PASS（11 件）
+Expected: PASS（20 件）
 
 - [ ] **Step 5: コミットする**
 
