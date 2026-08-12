@@ -2335,7 +2335,7 @@ git commit -m "feat: 制約の共通基盤と教員に関する制約 H1/H5/H6/H
 
 **判定の詳細:**
 
-- **H2（必修）**: 双方が必修で、学科と年次が一致し、同一コマで開講期間が重なるなら違反。ただし**双方がゼミ科目でかつ `base_name` が同一**の場合は違反としない（担当教員違いのクラス分けのため）
+- **H2（必修）**: 双方が必修で、学科と年次が一致し、同一コマで開講期間が重なるなら違反。ただし **`base_name` が同一**の場合は違反としない。担当教員ごとにクラスが分かれていても学生はそのうち一つを履修するため、同一コマに集約してよい。ゼミ科目に限らず、英語Ⅰ・情報リテラシーⅠ・商業簿記Ⅰ のように複数クラス開講される通常科目も対象
 - **H3（選択必修）**: 双方が選択必修で、学科と年次が一致し、**コースが 1 つ以上共通**していれば違反。どちらかのコースが空の場合は判定不能として違反としない（Stage 0 で `missing_course` 警告済み）
 
 - [ ] **Step 1: 失敗するテストを書く**
@@ -2397,9 +2397,32 @@ def test_h2_allows_same_seminar_with_different_teachers():
     assert check_h2(ctx, tt, b, (TimeSlot("月", 1),)) == []
 
 
+def test_h2_allows_same_non_seminar_course_with_different_teachers():
+    # 英語Ⅰ・情報リテラシーⅠ・商業簿記Ⅰ のような複数クラス開講の通常科目
+    a = make("A1", Category.REQUIRED, base_name="商業簿記Ⅰ", teacher="教員甲")
+    b = make("B1", Category.REQUIRED, base_name="商業簿記Ⅰ", teacher="教員乙")
+    ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
+    assert check_h2(ctx, tt, b, (TimeSlot("月", 1),)) == []
+
+
+def test_h2_allows_retake_section_to_share_with_the_original():
+    # base_name は【再】を除いた名前なので同一科目とみなされる
+    a = make("A1", Category.REQUIRED, base_name="日本語リテラシーⅠ", is_seminar=True)
+    b = make("B1", Category.REQUIRED, base_name="日本語リテラシーⅠ", is_seminar=False)
+    ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
+    assert check_h2(ctx, tt, b, (TimeSlot("月", 1),)) == []
+
+
 def test_h2_flags_two_different_seminars():
     a = make("A1", Category.REQUIRED, base_name="日本語リテラシーⅠ", is_seminar=True)
     b = make("B1", Category.REQUIRED, base_name="プレゼミナール", is_seminar=True)
+    ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
+    assert [v.rule_id for v in check_h2(ctx, tt, b, (TimeSlot("月", 1),))] == ["H2"]
+
+
+def test_h2_flags_two_different_course_names():
+    a = make("A1", Category.REQUIRED, base_name="商業簿記Ⅰ")
+    b = make("B1", Category.REQUIRED, base_name="工業簿記Ⅰ")
     ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
     assert [v.rule_id for v in check_h2(ctx, tt, b, (TimeSlot("月", 1),))] == ["H2"]
 
@@ -2475,7 +2498,12 @@ def _same_cohort(a: Subject, b: Subject) -> bool:
 def check_h2(
     context: Context, timetable: Timetable, subject: Subject, slots: tuple[TimeSlot, ...]
 ) -> list[Violation]:
-    """必修同士が衝突しない（学科 × 年次）。同一ゼミ科目は除外。"""
+    """必修同士が衝突しない（学科 × 年次）。同一科目の複数クラスは除外。
+
+    担当教員ごとにクラスが分かれていても、学生が履修するのはそのうち
+    一つなので同一コマに集約してよい。ゼミ科目に限らず、英語Ⅰや
+    商業簿記Ⅰ のような複数クラス開講の通常科目も同じ扱いになる。
+    """
     if subject.category is not Category.REQUIRED:
         return []
 
@@ -2486,11 +2514,7 @@ def check_h2(
                 continue
             if not _same_cohort(subject, other):
                 continue
-            if (
-                subject.is_seminar
-                and other.is_seminar
-                and subject.base_name == other.base_name
-            ):
+            if subject.base_name == other.base_name:
                 continue
             violations.append(Violation(
                 rule_id="H2",
