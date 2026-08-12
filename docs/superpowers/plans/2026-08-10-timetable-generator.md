@@ -4527,7 +4527,7 @@ git commit -m "feat: 踏襲モードを追加"
     - `.get_api_key() -> str | None`
     - `.set_api_key(key: str) -> None`
     - `.delete_api_key() -> None`
-    - `.masked_api_key() -> str | None` — `"AIza****"` 形式。全文は絶対に返さない
+    - `.masked_api_key() -> str | None` — `"AIzaSy****"` 形式。**どんな長さのキーでも全文は返さない**（末尾 `HIDDEN_MINIMUM` 文字は必ず隠す）
 
 **API キーの扱い:** `.env` の `GEMINI_API_KEY` に保存する。フロントへ返すのは `masked_api_key()` の結果のみ。`.env` は Task 1 で `.gitignore` に登録済み。
 
@@ -4536,6 +4536,8 @@ git commit -m "feat: 踏襲モードを追加"
 `backend/tests/test_settings_store.py`:
 
 ```python
+import pytest
+
 from app.settings_store import (
     DEFAULT_MAX_RETRIES,
     DEFAULT_MODEL,
@@ -4612,6 +4614,16 @@ def test_max_retries_is_clamped_to_at_least_one(tmp_path):
     store = build(tmp_path)
     store.save(AppSettings(model=DEFAULT_MODEL, max_retries=0))
     assert store.load().max_retries == 1
+
+
+@pytest.mark.parametrize("key", ["A", "AAAAA", "AAAAAA", "AAAAAAA"])
+def test_short_keys_are_never_fully_exposed(tmp_path, key):
+    # 実物の Gemini キーは長いが、検証用の短い値を入れられても全文は出さない
+    store = build(tmp_path)
+    store.set_api_key(key)
+    masked = store.masked_api_key()
+    assert masked.endswith("****")
+    assert key not in masked
 ```
 
 - [ ] **Step 2: テストを実行して失敗することを確認する**
@@ -4636,7 +4648,12 @@ from pathlib import Path
 API_KEY_NAME = "GEMINI_API_KEY"
 DEFAULT_MODEL = "gemini-2.5-flash"
 DEFAULT_MAX_RETRIES = 3
+
 VISIBLE_PREFIX_LENGTH = 6
+"""マスク時に見せる先頭文字数の上限。"""
+
+HIDDEN_MINIMUM = 4
+"""マスク時に必ず隠す末尾文字数。短いキーで全文が露出するのを防ぐ。"""
 
 _BACKEND_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_ENV_PATH = _BACKEND_DIR / ".env"
@@ -4709,16 +4726,22 @@ class SettingsStore:
         )
 
     def masked_api_key(self) -> str | None:
+        """フロントへ返す表示用の文字列。全文は決して返さない。
+
+        末尾 HIDDEN_MINIMUM 文字は必ず隠すため、短いキーを入れられても
+        全文が露出しない。
+        """
         key = self.get_api_key()
         if not key:
             return None
-        return f"{key[:VISIBLE_PREFIX_LENGTH]}****"
+        visible = min(VISIBLE_PREFIX_LENGTH, max(0, len(key) - HIDDEN_MINIMUM))
+        return f"{key[:visible]}****"
 ```
 
 - [ ] **Step 4: テストを実行して通ることを確認する**
 
 Run: `cd backend && ../.venv/bin/pytest tests/test_settings_store.py -v`
-Expected: PASS（9 件）
+Expected: PASS（13 件）
 
 - [ ] **Step 5: コミットする**
 
