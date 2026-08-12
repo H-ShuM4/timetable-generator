@@ -58,6 +58,21 @@ def test_chunk_codes_groups_by_department_and_term():
     assert sorted(chunks[0][1]) == ["A1", "A2"]
 
 
+def test_chunk_codes_splits_by_year():
+    # H2/H3 は 学科 × 年次 で衝突を判定するので、年次が違えば別チャンク
+    subjects = [
+        make("A1", year=1),
+        make("A2", year=1),
+        make("A3", year=2),
+    ]
+    ctx = Context.from_lists(subjects, [])
+    chunks = chunk_codes(ctx, [s.code for s in subjects])
+    assert len(chunks) == 2
+    by_size = sorted(chunks, key=lambda c: -len(c[1]))
+    assert sorted(by_size[0][1]) == ["A1", "A2"]
+    assert "1年" in by_size[0][0]
+
+
 def test_chunk_codes_splits_elective_required_by_course():
     subjects = [
         make("S1", category=Category.ELECTIVE_REQUIRED, courses=["情報コース"]),

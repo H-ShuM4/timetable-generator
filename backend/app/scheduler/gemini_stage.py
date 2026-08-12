@@ -15,7 +15,12 @@ from app.models.timetable import AssignmentSource, Timetable
 
 
 def chunk_codes(context: Context, codes: list[str]) -> list[tuple[str, list[str]]]:
-    """学科 × 開講期 × コースでチャンクに割る。"""
+    """学科 × 年次 × 開講期 × コースでチャンクに割る。
+
+    年次を鍵に含めるのは、H2 と H3 が「学科 × 年次」で衝突を判定する
+    ためである。年次で切ると各チャンクが互いに衝突しうる科目だけの塊に
+    なり、Gemini が考慮すべき範囲とチャンクの範囲が一致する。
+    """
     groups: dict[tuple, list[str]] = defaultdict(list)
     for code in codes:
         subject = context.subjects.get(code)
@@ -23,6 +28,7 @@ def chunk_codes(context: Context, codes: list[str]) -> list[tuple[str, list[str]
             continue
         key = (
             subject.department.value,
+            subject.year,
             subject.term.value,
             tuple(sorted(subject.courses)),
         )
@@ -30,8 +36,8 @@ def chunk_codes(context: Context, codes: list[str]) -> list[tuple[str, list[str]
 
     chunks: list[tuple[str, list[str]]] = []
     for key, group_codes in groups.items():
-        department, term, courses = key
-        label = f"{department}・{term}"
+        department, year, term, courses = key
+        label = f"{department}{year}年・{term}"
         if courses:
             label += f"・{'/'.join(courses)}"
         chunks.append((label, group_codes))
