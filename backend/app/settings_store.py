@@ -11,6 +11,10 @@ API_KEY_NAME = "GEMINI_API_KEY"
 DEFAULT_MODEL = "gemini-2.5-flash"
 DEFAULT_MAX_RETRIES = 3
 VISIBLE_PREFIX_LENGTH = 6
+"""マスク時に見せる先頭文字数の上限。"""
+
+HIDDEN_MINIMUM = 4
+"""マスク時に必ず隠す末尾文字数。短いキーで全文が露出するのを防ぐ。"""
 
 _BACKEND_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_ENV_PATH = _BACKEND_DIR / ".env"
@@ -83,7 +87,13 @@ class SettingsStore:
         )
 
     def masked_api_key(self) -> str | None:
+        """フロントへ返す表示用の文字列。全文は決して返さない。
+
+        末尾 HIDDEN_MINIMUM 文字は必ず隠すため、短いキーを入れられても
+        全文が露出しない。
+        """
         key = self.get_api_key()
         if not key:
             return None
-        return f"{key[:VISIBLE_PREFIX_LENGTH]}****"
+        visible = min(VISIBLE_PREFIX_LENGTH, max(0, len(key) - HIDDEN_MINIMUM))
+        return f"{key[:visible]}****"

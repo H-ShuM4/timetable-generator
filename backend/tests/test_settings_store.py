@@ -1,3 +1,5 @@
+import pytest
+
 from app.settings_store import (
     DEFAULT_MAX_RETRIES,
     DEFAULT_MODEL,
@@ -74,3 +76,13 @@ def test_max_retries_is_clamped_to_at_least_one(tmp_path):
     store = build(tmp_path)
     store.save(AppSettings(model=DEFAULT_MODEL, max_retries=0))
     assert store.load().max_retries == 1
+
+
+@pytest.mark.parametrize("key", ["A", "AAAAA", "AAAAAA", "AAAAAAA"])
+def test_short_keys_are_never_fully_exposed(tmp_path, key):
+    # 実物の Gemini キーは長いが、検証用の短い値を入れられても全文は出さない
+    store = build(tmp_path)
+    store.set_api_key(key)
+    masked = store.masked_api_key()
+    assert masked.endswith("****")
+    assert key not in masked
