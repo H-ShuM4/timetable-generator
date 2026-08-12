@@ -134,7 +134,11 @@ httpx>=0.28
 [pytest]
 testpaths = tests
 pythonpath = .
+filterwarnings =
+    ignore:Using `httpx` with `starlette.testclient` is deprecated:DeprecationWarning
 ```
+
+`filterwarnings` は FastAPI の `TestClient` が出す 1 件だけを対象にする。この警告は依存ライブラリ側の事情で、こちらのコードでは解消できない。全タスクで「警告なし」を検証基準にしているため、ここを曖昧にすると以降の検証が意味を失う。
 
 - [ ] **Step 6: 空の `__init__.py` を 2 つ作成する**
 
@@ -6085,6 +6089,25 @@ def test_upload_rejects_broken_workbook(tmp_path):
     assert "想定外" in response.json()["detail"]
 
 
+def test_upload_rejects_a_broken_teacher_file(tmp_path):
+    import openpyxl
+
+    broken = tmp_path / "broken_teachers.xlsx"
+    broken.write_bytes(b"this is not a workbook")
+
+    with CURRICULUM.open("rb") as curriculum, broken.open("rb") as bad:
+        response = client.post(
+            "/api/upload",
+            files={
+                "curriculum": ("c.xlsx", curriculum, "application/vnd.ms-excel"),
+                "teachers": ("t.xlsx", bad, "application/vnd.ms-excel"),
+            },
+        )
+    # どのファイルが原因かが分かること。スタックトレースを返さないこと
+    assert response.status_code == 400
+    assert "教員一覧" in response.json()["detail"]
+
+
 def test_upload_accepts_previous_year_files():
     with (
         CURRICULUM.open("rb") as curriculum,
@@ -6338,6 +6361,31 @@ from app.session_store import SessionData, store
 router = APIRouter(prefix="/api", tags=["upload"])
 
 
+FILE_LABELS = {
+    "curriculum": "カリキュラム一覧",
+    "teachers": "教員一覧",
+    "previous_curriculum": "前年度の時間割",
+    "previous_teachers": "前年度の教員一覧",
+}
+
+
+def _read_or_400(label: str, read):
+    """読み取り失敗を、どのファイルが原因か分かる 400 に変換する。
+
+    事務局は最大 4 種類のファイルを一度に投入するため、どれが問題なのか
+    を示さないと直しようがない。スタックトレースを返してはならない。
+    """
+    try:
+        return read()
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{label}を読み取れませんでした: {error}",
+        ) from error
+
+
 def _persist(upload: UploadFile) -> Path:
     suffix = Path(upload.filename or "upload.xlsx").suffix or ".xlsx"
     handle = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
@@ -6355,22 +6403,31 @@ async def upload(
 ) -> UploadResponse:
     logger = SessionLogger("upload")
     try:
-        subjects = read_curriculum_with_fallback(_persist(curriculum), logger)
-    except ValueError as error:
+        subjects = _read_or_400(
+            FILE_LABELS["curriculum"],
+            lambda: read_curriculum_with_fallback(_persist(curriculum), logger),
+        )
+        teacher_map = _read_or_400(
+            FILE_LABELS["teachers"],
+            lambda: read_teachers(_persist(teachers)),
+        )
+        previous_entries = {}
+        if previous_curriculum is not None:
+            previous_entries = _read_or_400(
+                FILE_LABELS["previous_curriculum"],
+                lambda: read_previous_timetable(_persist(previous_curriculum)),
+            )
+        previous_teacher_map = {}
+        if previous_teachers is not None:
+            previous_teacher_map = _read_or_400(
+                FILE_LABELS["previous_teachers"],
+                lambda: read_teachers(_persist(previous_teachers)),
+            )
+    finally:
         logger.close()
-        raise HTTPException(status_code=400, detail=str(error)) from error
 
-    teacher_map = read_teachers(_persist(teachers))
     joint_mismatches = assign_joint_ids(subjects)
     warnings = collect_warnings(subjects, teacher_map, joint_mismatches)
-
-    previous_entries = {}
-    previous_teacher_map = {}
-    if previous_curriculum is not None:
-        previous_entries = read_previous_timetable(_persist(previous_curriculum))
-    if previous_teachers is not None:
-        previous_teacher_map = read_teachers(_persist(previous_teachers))
-    logger.close()
 
     data = SessionData(
         subjects=subjects,
@@ -6478,7 +6535,7 @@ if FRONTEND_DIR.exists():
 - [ ] **Step 9: テストを実行して通ることを確認する**
 
 Run: `cd backend && ../.venv/bin/pytest tests/test_api_upload.py tests/test_api_settings.py -v`
-Expected: PASS（10 件）
+Expected: PASS（11 件）
 
 - [ ] **Step 10: サーバが起動することを確認する**
 
