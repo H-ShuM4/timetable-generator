@@ -149,6 +149,22 @@ def test_placer_survives_broken_json(tmp_path):
     logger.close()
 
 
+def test_placer_survives_an_unexpected_exception(tmp_path):
+    # 差し替え可能なクライアントが別種の例外を投げても生成全体を止めない
+    subjects = [make("A1")]
+    ctx = Context.from_lists(subjects, [])
+    tt = Timetable()
+    client = ScriptedClient([RuntimeError("想定外"), response(A1=["月1"])])
+    logger = SessionLogger("g7", log_dir=tmp_path)
+
+    failed = make_gemini_placer(client, max_retries=3)(ctx, tt, ["A1"], logger)
+
+    assert failed == []
+    assert tt.is_placed("A1")
+    assert any(e.level == "ERROR" for e in logger.events)
+    logger.close()
+
+
 def test_placer_ignores_codes_not_in_the_request(tmp_path):
     subjects = [make("A1")]
     ctx = Context.from_lists(subjects, [])

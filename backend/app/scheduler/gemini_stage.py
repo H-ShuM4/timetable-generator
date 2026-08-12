@@ -76,6 +76,12 @@ def make_gemini_placer(client: GeminiClient, max_retries: int):
             except GeminiError as error:
                 logger.warn(f"{label}: 呼び出しに失敗しました（{error}）", stage="Gemini")
                 continue
+            except Exception as error:  # 想定外の例外でも生成全体を止めない
+                logger.error(
+                    f"{label}: 想定外のエラーが発生しました（{type(error).__name__}: {error}）",
+                    stage="Gemini",
+                )
+                continue
             logger.info(
                 f"{label}: 応答を受信（{time.monotonic() - started:.1f}秒）", stage="Gemini"
             )
