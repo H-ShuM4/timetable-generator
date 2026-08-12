@@ -5117,6 +5117,8 @@ git commit -m "feat: Gemini のプロンプト生成と応答解析を追加"
 
 **再試行ループ:** 1 チャンクにつき最大 `max_retries` 回。違反した科目だけを次回の対象に残し、違反理由を `feedback` として渡す。API 例外・JSON 解析失敗も 1 回分の試行として数える。
 
+**例外を外へ漏らさないこと:** `GeminiError` と `ValueError` に加えて、想定外の例外も捕捉して 1 回分の試行として扱う。ここで例外が漏れると `run_pipeline` ごと落ち、ソルバーへのフォールバックが働かない。差し込まれるクライアントは差し替え可能なので、`RealGeminiClient` 以外の実装が別種の例外を投げる可能性がある。
+
 - [ ] **Step 1: 失敗するテストを書く**
 
 `backend/tests/test_gemini_stage.py`:
@@ -5273,6 +5275,22 @@ def test_placer_survives_broken_json(tmp_path):
     logger.close()
 
 
+def test_placer_survives_an_unexpected_exception(tmp_path):
+    # 差し替え可能なクライアントが別種の例外を投げても生成全体を止めない
+    subjects = [make("A1")]
+    ctx = Context.from_lists(subjects, [])
+    tt = Timetable()
+    client = ScriptedClient([RuntimeError("想定外"), response(A1=["月1"])])
+    logger = SessionLogger("g7", log_dir=tmp_path)
+
+    failed = make_gemini_placer(client, max_retries=3)(ctx, tt, ["A1"], logger)
+
+    assert failed == []
+    assert tt.is_placed("A1")
+    assert any(e.level == "ERROR" for e in logger.events)
+    logger.close()
+
+
 def test_placer_ignores_codes_not_in_the_request(tmp_path):
     subjects = [make("A1")]
     ctx = Context.from_lists(subjects, [])
@@ -5423,6 +5441,12 @@ def make_gemini_placer(client: GeminiClient, max_retries: int):
             except GeminiError as error:
                 logger.warn(f"{label}: 呼び出しに失敗しました（{error}）", stage="Gemini")
                 continue
+            except Exception as error:  # 想定外の例外でも生成全体を止めない
+                logger.error(
+                    f"{label}: 想定外のエラーが発生しました（{type(error).__name__}: {error}）",
+                    stage="Gemini",
+                )
+                continue
             logger.info(
                 f"{label}: 応答を受信（{time.monotonic() - started:.1f}秒）", stage="Gemini"
             )
@@ -5464,7 +5488,7 @@ def make_gemini_placer(client: GeminiClient, max_retries: int):
 - [ ] **Step 5: テストを実行して通ることを確認する**
 
 Run: `cd backend && ../.venv/bin/pytest tests/test_gemini_stage.py -v`
-Expected: PASS（8 件）
+Expected: PASS（9 件）
 
 - [ ] **Step 6: 全テストを実行する**
 
