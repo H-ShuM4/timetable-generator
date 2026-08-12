@@ -66,6 +66,25 @@ def test_upload_rejects_broken_workbook(tmp_path):
     assert "想定外" in response.json()["detail"]
 
 
+def test_upload_rejects_a_broken_teacher_file(tmp_path):
+    import openpyxl
+
+    broken = tmp_path / "broken_teachers.xlsx"
+    broken.write_bytes(b"this is not a workbook")
+
+    with CURRICULUM.open("rb") as curriculum, broken.open("rb") as bad:
+        response = client.post(
+            "/api/upload",
+            files={
+                "curriculum": ("c.xlsx", curriculum, "application/vnd.ms-excel"),
+                "teachers": ("t.xlsx", bad, "application/vnd.ms-excel"),
+            },
+        )
+    # どのファイルが原因かが分かること。スタックトレースを返さないこと
+    assert response.status_code == 400
+    assert "教員一覧" in response.json()["detail"]
+
+
 def test_upload_accepts_previous_year_files():
     with (
         CURRICULUM.open("rb") as curriculum,
