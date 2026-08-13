@@ -15,8 +15,8 @@ function renderRetargetList() {
   container.innerHTML = retargetItems
     .map((item) => `
       <label class="field">
-        <input type="checkbox" value="${item.code}" checked>
-        ${item.code} ${item.name}（${item.teacher}） — ${item.reason}
+        <input type="checkbox" value="${escapeHtml(item.code)}" checked>
+        ${escapeHtml(item.code)} ${escapeHtml(item.name)}（${escapeHtml(item.teacher)}） — ${escapeHtml(item.reason)}
       </label>`)
     .join("");
 }
@@ -67,8 +67,12 @@ async function startGeneration() {
     if (body.mode !== selectedMode()) {
       setStatus(`API キーが未設定のため ${body.mode} モードで実行します`);
     }
-    connectLogStream(sessionId, async () => {
+    connectLogStream(sessionId, async (finished) => {
       button.disabled = false;
+      if (!finished) {
+        setStatus("ログ配信が切断されました。結果タブで状態を確認してください", true);
+        return;
+      }
       const result = await api.getResult(sessionId);
       setStatus(
         `完了: 配置 ${result.placements.length} 件 / ` +

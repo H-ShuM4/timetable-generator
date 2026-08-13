@@ -48,7 +48,7 @@ function connectLogStream(sessionId, onDone) {
   logSource.addEventListener("done", () => {
     logSource.close();
     logSource = null;
-    if (onDone) onDone();
+    if (onDone) onDone(true);
   });
   logSource.onerror = () => {
     appendLog({
@@ -59,6 +59,7 @@ function connectLogStream(sessionId, onDone) {
     });
     if (logSource) logSource.close();
     logSource = null;
+    if (onDone) onDone(false);
   };
 }
 
