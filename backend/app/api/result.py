@@ -5,7 +5,7 @@
 """
 from fastapi import APIRouter, HTTPException
 
-from app.api.schemas import MoveIn, MoveOut, PlacementOut, ResultOut, ViolationOut
+from app.api.schemas import MoveIn, MoveOut, PlacementOut, ResultOut, SubjectRef, ViolationOut
 from app.constraints.validator import check_placement, validate_all
 from app.gemini.prompts import parse_slot_label, slot_label
 from app.models.timetable import AssignmentSource
@@ -30,13 +30,33 @@ def _to_violation(violation) -> ViolationOut:
     )
 
 
+def _to_subject_refs(codes: list[str], context) -> list[SubjectRef]:
+    refs: list[SubjectRef] = []
+    for code in codes:
+        subject = context.subjects.get(code)
+        if subject is None:
+            continue
+        refs.append(SubjectRef(
+            code=subject.code,
+            name=subject.name,
+            teacher=subject.teacher,
+            department=subject.department.value,
+            year=subject.year,
+            term=subject.term.value,
+            category=subject.category.value,
+        ))
+    return refs
+
+
 @router.get("/{session_id}", response_model=ResultOut)
 async def get_result(session_id: str) -> ResultOut:
     data = _require_session(session_id)
     if data.result is None:
+        status = "failed" if data.error else ("running" if data.running else "pending")
         return ResultOut(
-            status="running" if data.running else "pending",
+            status=status,
             placements=[], unplaced=[], violations=[], intensive=[],
+            error=data.error,
         )
 
     context = data.context
@@ -61,9 +81,9 @@ async def get_result(session_id: str) -> ResultOut:
     return ResultOut(
         status="done",
         placements=placements,
-        unplaced=data.result.unplaced,
+        unplaced=_to_subject_refs(data.result.unplaced, context),
         violations=[_to_violation(v) for v in data.result.violations],
-        intensive=data.result.intensive_codes,
+        intensive=_to_subject_refs(data.result.intensive_codes, context),
     )
 
 

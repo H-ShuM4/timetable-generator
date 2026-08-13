@@ -100,17 +100,18 @@ function renderGrid() {
   attachDragHandlers();
 }
 
-function renderSide() {
-  const byCode = Object.fromEntries(resultData.placements.map((p) => [p.code, p]));
-  const describe = (code) => {
-    const p = byCode[code];
-    return p ? `${escapeHtml(code)} ${escapeHtml(p.name)}` : escapeHtml(code);
-  };
+function describeSubjectRef(subject) {
+  return `${escapeHtml(subject.code)} ${escapeHtml(subject.name)}`
+    + `（${escapeHtml(subject.teacher)}・${escapeHtml(subject.department)}・`
+    + `${escapeHtml(String(subject.year))}年・${escapeHtml(subject.term)}・`
+    + `${escapeHtml(subject.category)}）`;
+}
 
+function renderSide() {
   document.getElementById("unplaced-list").innerHTML =
-    resultData.unplaced.map((c) => `<li>${describe(c)}</li>`).join("") || "<li>なし</li>";
+    resultData.unplaced.map((s) => `<li>${describeSubjectRef(s)}</li>`).join("") || "<li>なし</li>";
   document.getElementById("intensive-list").innerHTML =
-    resultData.intensive.map((c) => `<li>${describe(c)}</li>`).join("") || "<li>なし</li>";
+    resultData.intensive.map((s) => `<li>${describeSubjectRef(s)}</li>`).join("") || "<li>なし</li>";
   document.getElementById("violation-list").innerHTML =
     resultData.violations
       .map((v) => `<li class="log-ERROR">[${escapeHtml(v.rule_id)}] ${escapeHtml(v.message)}</li>`)
@@ -186,7 +187,12 @@ async function renderTimetable() {
     resultData = await api.getResult(window.appState.sessionId);
   } catch (error) {
     document.getElementById("timetable-grid").innerHTML =
-      `<p class="log-ERROR">結果の取得に失敗しました: ${error.message}</p>`;
+      `<p class="log-ERROR">結果の取得に失敗しました: ${escapeHtml(error.message)}</p>`;
+    return;
+  }
+  if (resultData.status === "failed") {
+    document.getElementById("timetable-grid").innerHTML =
+      `<p class="log-ERROR">生成に失敗しました: ${escapeHtml(resultData.error || "不明なエラー")}</p>`;
     return;
   }
   if (resultData.status !== "done") {

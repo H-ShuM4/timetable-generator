@@ -74,6 +74,10 @@ async function startGeneration() {
         return;
       }
       const result = await api.getResult(sessionId);
+      if (result.status === "failed") {
+        setStatus(`生成に失敗しました: ${result.error || "不明なエラー"}`, true);
+        return;
+      }
       setStatus(
         `完了: 配置 ${result.placements.length} 件 / ` +
         `未配置 ${result.unplaced.length} 件 / 違反 ${result.violations.length} 件`

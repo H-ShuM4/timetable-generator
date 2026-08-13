@@ -84,6 +84,7 @@ async def start_generation(session_id: str, payload: GenerateIn) -> dict:
 
     data.logger = logger
     data.result = None
+    data.error = None
     data.running = True
 
     def worker() -> None:
@@ -94,6 +95,7 @@ async def start_generation(session_id: str, payload: GenerateIn) -> dict:
             )
             store.save_result(session_id)
         except Exception as error:  # 生成を止めず、必ずログに残す
+            data.error = str(error)
             logger.error(f"生成中に予期しないエラーが発生しました: {error}", stage="Stage 6")
         finally:
             data.running = False

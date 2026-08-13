@@ -74,12 +74,23 @@ class PlacementOut(BaseModel):
     source: str
 
 
+class SubjectRef(BaseModel):
+    code: str
+    name: str
+    teacher: str
+    department: str
+    year: int
+    term: str
+    category: str
+
+
 class ResultOut(BaseModel):
     status: str
     placements: list[PlacementOut]
-    unplaced: list[str]
+    unplaced: list[SubjectRef]
     violations: list[ViolationOut]
-    intensive: list[str]
+    intensive: list[SubjectRef]
+    error: str | None = None
 
 
 class MoveIn(BaseModel):

@@ -29,6 +29,7 @@ class SessionData:
     result: GenerationResult | None = None
     logger: SessionLogger | None = None
     running: bool = False
+    error: str | None = None
 
     @property
     def context(self) -> Context:
