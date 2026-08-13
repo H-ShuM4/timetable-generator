@@ -7758,9 +7758,14 @@ function renderLogEntries() {
 }
 
 function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
+  // textContent → innerHTML の方式は引用符をエスケープしないため使わない。
+  // 値は value="..." 属性の中にも入るので、引用符まで潰す必要がある。
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function appendLog(event) {
