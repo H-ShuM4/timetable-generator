@@ -87,7 +87,7 @@ function renderWarnings(warnings) {
   }
   container.innerHTML = `
     <h3>警告 ${warnings.length} 件</h3>
-    <ul>${warnings.map((w) => `<li>[${w.kind}] ${w.message}</li>`).join("")}</ul>`;
+    <ul>${warnings.map((w) => `<li>[${escapeHtml(w.kind)}] ${escapeHtml(w.message)}</li>`).join("")}</ul>`;
 }
 
 async function submitFiles() {
@@ -104,7 +104,7 @@ async function submitFiles() {
     document.querySelector('#tabs button[data-view="generate"]').disabled = false;
   } catch (error) {
     document.getElementById("upload-summary").innerHTML =
-      `<p class="log-ERROR">読み込みに失敗しました: ${error.message}</p>`;
+      `<p class="log-ERROR">読み込みに失敗しました: ${escapeHtml(error.message)}</p>`;
   } finally {
     button.disabled = false;
   }
