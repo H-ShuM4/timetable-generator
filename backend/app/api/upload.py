@@ -7,10 +7,11 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.api.schemas import UploadResponse, UploadSummary, WarningOut
+from app.ingest.curriculum_reader import read_curriculum_rows
 from app.ingest.joint_pairing import assign_joint_ids
 from app.ingest.markitdown_fallback import read_curriculum_with_fallback
 from app.ingest.teacher_reader import read_teachers
-from app.ingest.validators import collect_warnings
+from app.ingest.validators import check_partial_slots, collect_warnings
 from app.logging.session_logger import SessionLogger
 from app.scheduler.inherit import read_previous_timetable
 from app.session_store import SessionData, store
@@ -59,9 +60,16 @@ async def upload(
 ) -> UploadResponse:
     logger = SessionLogger("upload")
     try:
+        curriculum_path = _read_or_400(
+            FILE_LABELS["curriculum"], lambda: _persist(curriculum)
+        )
         subjects = _read_or_400(
             FILE_LABELS["curriculum"],
-            lambda: read_curriculum_with_fallback(_persist(curriculum), logger),
+            lambda: read_curriculum_with_fallback(curriculum_path, logger),
+        )
+        partial_slot_warnings = _read_or_400(
+            FILE_LABELS["curriculum"],
+            lambda: check_partial_slots(read_curriculum_rows(curriculum_path)),
         )
         teacher_map = _read_or_400(
             FILE_LABELS["teachers"],
@@ -83,7 +91,7 @@ async def upload(
         logger.close()
 
     joint_mismatches = assign_joint_ids(subjects)
-    warnings = collect_warnings(subjects, teacher_map, joint_mismatches)
+    warnings = collect_warnings(subjects, teacher_map, joint_mismatches) + partial_slot_warnings
 
     data = SessionData(
         subjects=subjects,

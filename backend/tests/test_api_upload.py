@@ -85,6 +85,37 @@ def test_upload_rejects_a_broken_teacher_file(tmp_path):
     assert "教員一覧" in response.json()["detail"]
 
 
+def test_upload_reports_partial_slot_warning(tmp_path):
+    import openpyxl
+
+    curriculum = tmp_path / "partial.xlsx"
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.append([
+        "授業コード", "授業科目名称", "学科", "年次配当", "開講期間",
+        "科目区分", "教員氏名", "曜日", "時限",
+    ])
+    sheet.append([
+        "P001", "片手落ち科目", "経営", 1, "前期", "必修", "教員甲", "月", None,
+    ])
+    workbook.save(curriculum)
+
+    with curriculum.open("rb") as curriculum_file, TEACHERS.open("rb") as teachers:
+        response = client.post(
+            "/api/upload",
+            files={
+                "curriculum": ("p.xlsx", curriculum_file, "application/vnd.ms-excel"),
+                "teachers": ("t.xlsx", teachers, "application/vnd.ms-excel"),
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    partial = [w for w in body["warnings"] if w["kind"] == "partial_slot"]
+    assert len(partial) == 1
+    assert partial[0]["subject_code"] == "P001"
+
+
 def test_upload_accepts_previous_year_files():
     with (
         CURRICULUM.open("rb") as curriculum,

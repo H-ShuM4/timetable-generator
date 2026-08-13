@@ -102,6 +102,28 @@ def _parse_courses(value) -> list[str]:
     return [token.strip() for token in str(value).replace("、", ",").split(",") if token.strip()]
 
 
+def read_curriculum_rows(path: str | Path) -> list[dict]:
+    """全シートの行を、列見出しをキーにした dict のリストとしてそのまま返す。
+
+    Subject に変換すると曜日・時限が片方だけ入力されている行の情報は
+    失われる（`fixed_slot` は両方揃った場合のみ作られる）ため、
+    `validators.check_partial_slots` はこの生の行データを直接見る。
+    """
+    workbook = openpyxl.load_workbook(path, data_only=True)
+    rows_out: list[dict] = []
+    for sheet in workbook.worksheets:
+        rows = list(sheet.iter_rows(values_only=True))
+        if not rows:
+            continue
+        columns = _header_index(rows[0])
+        for row in rows[1:]:
+            code = _cell(row, columns, "授業コード")
+            if not code:
+                continue
+            rows_out.append({name: _cell(row, columns, name) for name in columns})
+    return rows_out
+
+
 def read_curriculum(path: str | Path) -> list[Subject]:
     """全シートを読み、Subject のリストを返す。"""
     seminar_names = set(_load_json("seminar_subjects.json", []))
