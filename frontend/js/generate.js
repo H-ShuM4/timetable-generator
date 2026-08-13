@@ -31,9 +31,15 @@ async function onEnterGenerateView() {
     renderRetargetList();
   } catch (error) {
     document.getElementById("retarget-list").innerHTML =
-      `<p class="log-ERROR">組み替え対象の取得に失敗しました: ${error.message}</p>`;
+      `<p class="log-ERROR">組み替え対象の取得に失敗しました: ${escapeHtml(error.message)}</p>`;
   }
 }
+
+const MODE_LABELS = {
+  mock: "モック",
+  optimize: "最適化",
+  inherit: "踏襲",
+};
 
 function checkedRetargetCodes() {
   return Array.from(
@@ -65,7 +71,8 @@ async function startGeneration() {
       sessionId, selectedMode(), checkedRetargetCodes()
     );
     if (body.mode !== selectedMode()) {
-      setStatus(`API キーが未設定のため ${body.mode} モードで実行します`);
+      const label = MODE_LABELS[body.mode] || body.mode;
+      setStatus(`API キーが未設定のため ${label} モードで実行します`);
     }
     connectLogStream(sessionId, async (finished) => {
       button.disabled = false;

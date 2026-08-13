@@ -5,7 +5,7 @@ Gemini 段階は gemini_placer として注入する。注入しなければ
 """
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Protocol
+from typing import Protocol
 
 from app.constraints.context import Context, Violation
 from app.constraints.validator import validate_all
@@ -16,7 +16,7 @@ from app.models.enums import Category
 from app.models.subject import Subject
 from app.models.teacher import Teacher
 from app.models.timetable import Timetable
-from app.scheduler.inherit import InheritPlan
+from app.scheduler.inherit import InheritPlan, apply_plan
 from app.scheduler.prelock import prelock
 from app.scheduler.solver import solve
 
@@ -130,7 +130,5 @@ def run_pipeline(
 
 
 def apply_inherit_plan(context, timetable, inherit_plan, logger) -> None:
-    """踏襲モードで前年度の配置を反映する。Task 16 で実装を差し替える。"""
-    from app.scheduler.inherit import apply_plan
-
+    """踏襲モードで前年度の配置を反映する。"""
     apply_plan(context, timetable, inherit_plan, logger)
