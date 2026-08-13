@@ -78,6 +78,24 @@ def test_max_retries_is_clamped_to_at_least_one(tmp_path):
     assert store.load().max_retries == 1
 
 
+def test_load_falls_back_to_defaults_on_invalid_json(tmp_path):
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text("{not valid json", encoding="utf-8")
+    settings = SettingsStore(tmp_path / ".env", settings_path).load()
+    assert settings.model == DEFAULT_MODEL
+    assert settings.max_retries == DEFAULT_MAX_RETRIES
+
+
+def test_load_falls_back_to_defaults_when_max_retries_is_not_numeric(tmp_path):
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(
+        '{"model": "gemini-2.5-pro", "max_retries": "many"}', encoding="utf-8"
+    )
+    settings = SettingsStore(tmp_path / ".env", settings_path).load()
+    assert settings.model == DEFAULT_MODEL
+    assert settings.max_retries == DEFAULT_MAX_RETRIES
+
+
 @pytest.mark.parametrize("key", ["A", "AAAAA", "AAAAAA", "AAAAAAA"])
 def test_short_keys_are_never_fully_exposed(tmp_path, key):
     # 実物の Gemini キーは長いが、検証用の短い値を入れられても全文は出さない

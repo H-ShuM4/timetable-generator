@@ -38,13 +38,23 @@ class SettingsStore:
         self.settings_path = Path(settings_path) if settings_path else DEFAULT_SETTINGS_PATH
 
     def load(self) -> AppSettings:
+        """settings.json を読み込む。壊れている場合はデフォルト値にフォールバックする。
+
+        設定タブは API キー不正時の唯一の修正経路であるため、無関係な理由で
+        500 を返してはならない。
+        """
         if not self.settings_path.exists():
             return AppSettings()
-        raw = json.loads(self.settings_path.read_text(encoding="utf-8"))
-        return AppSettings(
-            model=raw.get("model", DEFAULT_MODEL) or DEFAULT_MODEL,
-            max_retries=max(1, int(raw.get("max_retries", DEFAULT_MAX_RETRIES))),
-        )
+        try:
+            raw = json.loads(self.settings_path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                raise ValueError("settings.json の内容がオブジェクトではありません")
+            return AppSettings(
+                model=raw.get("model", DEFAULT_MODEL) or DEFAULT_MODEL,
+                max_retries=max(1, int(raw.get("max_retries", DEFAULT_MAX_RETRIES))),
+            )
+        except (json.JSONDecodeError, ValueError, TypeError, OSError):
+            return AppSettings()
 
     def save(self, settings: AppSettings) -> None:
         self.settings_path.parent.mkdir(parents=True, exist_ok=True)
