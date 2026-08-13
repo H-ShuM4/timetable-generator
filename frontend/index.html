@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>時間割自動生成システム</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header>
+    <h1>時間割自動生成システム</h1>
+    <nav id="tabs">
+      <button data-view="upload" class="active">① ファイル読込</button>
+      <button data-view="generate" disabled>② 生成</button>
+      <button data-view="result" disabled>③ 結果</button>
+      <button data-view="settings">④ 設定</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="view-upload" class="view active">
+      <h2>Excel ファイルの読み込み</h2>
+      <div id="dropzone">
+        <p>カリキュラム一覧・教員一覧の Excel をここにドラッグ&amp;ドロップ</p>
+        <p class="hint">踏襲モードを使う場合は前年度のファイルも一緒に投入してください</p>
+        <input type="file" id="file-input" multiple accept=".xlsx">
+      </div>
+      <div id="file-assign"></div>
+      <button id="upload-button" disabled>読み込む</button>
+      <div id="upload-summary"></div>
+      <div id="upload-warnings"></div>
+    </section>
+
+    <section id="view-generate" class="view">
+      <h2>時間割の生成</h2>
+      <div id="mode-select">
+        <label><input type="radio" name="mode" value="mock" checked> モックモード</label>
+        <label><input type="radio" name="mode" value="optimize"> 最適化モード</label>
+        <label><input type="radio" name="mode" value="inherit"> 踏襲モード</label>
+      </div>
+      <div id="retarget-panel" hidden>
+        <h3>組み替え対象</h3>
+        <div id="retarget-list"></div>
+      </div>
+      <button id="generate-button">生成を開始</button>
+      <div id="generate-status"></div>
+    </section>
+
+    <section id="view-result" class="view">
+      <h2>生成結果</h2>
+      <div id="result-tabs"></div>
+      <div id="timetable-grid"></div>
+      <aside id="result-side">
+        <h3>未配置科目</h3>
+        <ul id="unplaced-list"></ul>
+        <h3>集中講義</h3>
+        <ul id="intensive-list"></ul>
+        <h3>制約違反</h3>
+        <ul id="violation-list"></ul>
+      </aside>
+      <button id="export-button">Excel として出力</button>
+    </section>
+
+    <section id="view-settings" class="view">
+      <h2>Gemini の設定</h2>
+      <div class="field">
+        <label for="api-key">API キー</label>
+        <input type="password" id="api-key" placeholder="AIza...">
+        <span id="api-key-status"></span>
+        <button id="save-key">保存</button>
+        <button id="delete-key">削除</button>
+      </div>
+      <div class="field">
+        <label for="model">モデル</label>
+        <input list="model-options" id="model">
+        <datalist id="model-options">
+          <option value="gemini-2.5-flash"></option>
+          <option value="gemini-2.5-pro"></option>
+          <option value="gemini-2.5-flash-lite"></option>
+        </datalist>
+      </div>
+      <div class="field">
+        <label for="max-retries">再試行回数</label>
+        <input type="number" id="max-retries" min="1" max="10">
+      </div>
+      <button id="save-settings">設定を保存</button>
+      <div id="settings-status"></div>
+    </section>
+  </main>
+
+  <div id="log-panel" class="collapsed">
+    <div id="log-header">
+      <span>ログ</span>
+      <div>
+        <select id="log-filter">
+          <option value="ALL">すべて</option>
+          <option value="INFO">INFO</option>
+          <option value="WARN">WARN</option>
+          <option value="ERROR">ERROR</option>
+        </select>
+        <button id="log-toggle">▲</button>
+      </div>
+    </div>
+    <div id="log-body"></div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/upload.js"></script>
+  <script src="/js/settings.js"></script>
+  <script src="/js/logviewer.js"></script>
+  <script src="/js/generate.js"></script>
+  <script src="/js/timetable.js"></script>
+  <script src="/js/main.js"></script>
+</body>
+</html>
