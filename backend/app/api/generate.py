@@ -71,9 +71,17 @@ async def start_generation(session_id: str, payload: GenerateIn) -> dict:
 
     placer = None
     if mode is not GenerationMode.MOCK:
-        placer = make_gemini_placer(
-            RealGeminiClient(api_key, settings.model), settings.max_retries
-        )
+        try:
+            gemini_client = RealGeminiClient(api_key, settings.model)
+        except Exception as error:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Gemini クライアントの初期化に失敗しました。"
+                    f"API キーが不正である可能性があります: {error}"
+                ),
+            ) from error
+        placer = make_gemini_placer(gemini_client, settings.max_retries)
 
     inherit_plan = None
     if mode is GenerationMode.INHERIT:
