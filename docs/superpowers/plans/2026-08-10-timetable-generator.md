@@ -7789,7 +7789,7 @@ function connectLogStream(sessionId, onDone) {
   logSource.addEventListener("done", () => {
     logSource.close();
     logSource = null;
-    if (onDone) onDone();
+    if (onDone) onDone(true);
   });
   logSource.onerror = () => {
     appendLog({
@@ -7800,6 +7800,8 @@ function connectLogStream(sessionId, onDone) {
     });
     if (logSource) logSource.close();
     logSource = null;
+    // 切断時も必ず呼ぶ。呼ばないと生成ボタンが無効のまま操作不能になる
+    if (onDone) onDone(false);
   };
 }
 
@@ -7834,11 +7836,12 @@ function renderRetargetList() {
     container.innerHTML = "<p>組み替え対象はありません。前年度ファイルを読み込んでください。</p>";
     return;
   }
+  // 科目名・教員名は Excel 由来の文字列なので必ずエスケープする
   container.innerHTML = retargetItems
     .map((item) => `
       <label class="field">
-        <input type="checkbox" value="${item.code}" checked>
-        ${item.code} ${item.name}（${item.teacher}） — ${item.reason}
+        <input type="checkbox" value="${escapeHtml(item.code)}" checked>
+        ${escapeHtml(item.code)} ${escapeHtml(item.name)}（${escapeHtml(item.teacher)}） — ${escapeHtml(item.reason)}
       </label>`)
     .join("");
 }
@@ -7889,8 +7892,12 @@ async function startGeneration() {
     if (body.mode !== selectedMode()) {
       setStatus(`API キーが未設定のため ${body.mode} モードで実行します`);
     }
-    connectLogStream(sessionId, async () => {
+    connectLogStream(sessionId, async (finished) => {
       button.disabled = false;
+      if (!finished) {
+        setStatus("ログ配信が切断されました。結果タブで状態を確認してください", true);
+        return;
+      }
       const result = await api.getResult(sessionId);
       setStatus(
         `完了: 配置 ${result.placements.length} 件 / ` +
