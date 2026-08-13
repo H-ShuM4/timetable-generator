@@ -159,6 +159,23 @@ def test_h7_allows_double_slot_subject_occupying_two_periods():
     assert check_h7(ctx, tt, double, (TimeSlot("水", 2), TimeSlot("水", 3))) == []
 
 
+def test_h7_does_not_double_count_subjects_own_existing_placement():
+    # A1 は月1に配置済み、教員甲はさらに月2にB1を持つ。この状態で
+    # A1 を月3へ動かせるか再検証する（result.py の move は、新しい候補を
+    # 検証する時点でまだ A1 自身の旧配置 [月1] を timetable から取り除いて
+    # いない）。自身の旧配置を「他の科目」として数えてしまうと
+    # 月1・月2・月3 の3コマ連続とみなし、誤って H7 違反を報告する。
+    # 実際には A1 が月3へ移るのだから月1は空き、月2・月3の2コマ連続に
+    # とどまり違反ではない。
+    a, b = make_subject("A1"), make_subject("A2")
+    ctx = build([a, b], [Teacher("教員甲", TeacherKind.FULL_TIME)])
+    tt = Timetable()
+    tt.place("A1", (TimeSlot("月", 1),), AssignmentSource.PRELOCK)
+    tt.place("A2", (TimeSlot("月", 2),), AssignmentSource.PRELOCK)
+
+    assert check_h7(ctx, tt, a, (TimeSlot("月", 3),)) == []
+
+
 def test_unknown_teacher_is_unconstrained():
     a = make_subject("A1", teacher="未登録")
     ctx = build([a], [])
