@@ -4,7 +4,7 @@
 subject 自身の既存配置は無視する。
 """
 from app.constraints.context import Context, Violation, others_at
-from app.constraints.period_overlap import periods_overlap
+from app.constraints.period_overlap import active_quarters
 from app.models.enums import TeacherKind
 from app.models.subject import Subject
 from app.models.timeslot import TimeSlot
@@ -88,38 +88,61 @@ def check_h6(
     ]
 
 
-def _periods_on_day(
-    context: Context, timetable: Timetable, subject: Subject, day: str
-) -> set[int]:
-    """その日に subject の担当教員が持つ時限。subject 自身の既存配置は除く。"""
-    periods: set[int] = set()
+def _teacher_day_load(
+    context: Context, timetable: Timetable, subject: Subject
+) -> dict[str, list[tuple[int, frozenset]]]:
+    """担当教員の既存配置を「曜日 → (時限, 開講クオーター集合)」に集める。
+
+    subject 自身の配置は除く。配置全体の走査は 1 回だけにしたい。
+    曜日ごと・クオーター区間ごとに走査し直すと、実データ規模では
+    生成時間が体感できるほど伸びる。
+    """
+    load: dict[str, list[tuple[int, frozenset]]] = {}
     if not subject.teacher:
-        return periods
+        return load
     for code, assignment in timetable.assignments.items():
         if code == subject.code:
             continue
         other = context.subjects.get(code)
         if other is None or other.teacher != subject.teacher:
             continue
-        if not periods_overlap(subject.term, subject.quarter, other.term, other.quarter):
-            continue
-        periods.update(slot.period for slot in assignment.slots if slot.day == day)
-    return periods
+        windows = active_quarters(other.term, other.quarter)
+        for slot in assignment.slots:
+            load.setdefault(slot.day, []).append((slot.period, windows))
+    return load
+
+
+def _longest_run(periods: set[int]) -> int:
+    longest = run = 0
+    for period in sorted(periods):
+        run = run + 1 if (period - 1) in periods else 1
+        longest = max(longest, run)
+    return longest
 
 
 def check_h7(
     context: Context, timetable: Timetable, subject: Subject, slots: tuple[TimeSlot, ...]
 ) -> list[Violation]:
-    """同一教員が同一日に 3 コマ以上連続しない。"""
-    violations: list[Violation] = []
-    for day in {slot.day for slot in slots}:
-        occupied = _periods_on_day(context, timetable, subject, day)
-        occupied.update(slot.period for slot in slots if slot.day == day)
+    """同一教員が同一日に 3 コマ以上連続しない。
 
-        run = 0
-        for period in sorted(occupied):
-            run = run + 1 if (period - 1) in occupied else 1
-            if run > MAX_CONSECUTIVE:
+    連続の判定はクオーター区間ごとに行う。H7 は 3 科目以上をまとめて
+    見る唯一の制約であり、「subject と重なる科目」を一括りにすると、
+    互いには重ならない後①と後②の科目まで一緒に数えてしまう。実データ
+    では 水1（学期全体）・水2（後①）・水3（後②）という配置が 3 コマ
+    連続と誤検出された。実際には後期前半が水1・水2、後期後半が水1・水3
+    で、3 コマ連続する瞬間は存在しない。
+    """
+    violations: list[Violation] = []
+    windows = active_quarters(subject.term, subject.quarter)
+    load = _teacher_day_load(context, timetable, subject)
+
+    for day in sorted({slot.day for slot in slots}):
+        candidate = {slot.period for slot in slots if slot.day == day}
+        existing = load.get(day, ())
+        for window in sorted(windows, key=lambda q: q.value):
+            occupied = {p for p, ws in existing if window in ws}
+            occupied |= candidate
+            if _longest_run(occupied) > MAX_CONSECUTIVE:
                 violations.append(Violation(
                     rule_id="H7",
                     subject_code=subject.code,

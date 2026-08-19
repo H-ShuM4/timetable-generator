@@ -141,6 +141,36 @@ def test_h7_allows_two_consecutive_periods():
     assert check_h7(ctx, tt, b, (TimeSlot("月", 2),)) == []
 
 
+def test_h7_does_not_mix_courses_from_different_quarters():
+    """後①と後②の科目は同時に開講されないので、一緒に数えてはいけない。
+
+    実データで 水1（学期全体）・水2（後①）・水3（後②）が 3 コマ連続と
+    誤検出された。実際には後期前半が水1・水2、後期後半が水1・水3 で、
+    3 コマ連続する瞬間は無い。
+    """
+    whole = make_subject("A1", term=Term.FALL)
+    first = make_subject("A2", term=Term.FALL, quarter=Quarter.Q3)
+    second = make_subject("A3", term=Term.FALL, quarter=Quarter.Q4)
+    ctx = build([whole, first, second], [Teacher("教員甲", TeacherKind.FULL_TIME)])
+    tt = Timetable()
+    tt.place("A2", (TimeSlot("水", 2),), AssignmentSource.PRELOCK)
+    tt.place("A3", (TimeSlot("水", 3),), AssignmentSource.PRELOCK)
+
+    assert check_h7(ctx, tt, whole, (TimeSlot("水", 1),)) == []
+
+
+def test_h7_still_flags_three_in_a_row_within_one_quarter():
+    whole = make_subject("A1", term=Term.FALL)
+    a = make_subject("A2", term=Term.FALL, quarter=Quarter.Q3)
+    b = make_subject("A3", term=Term.FALL, quarter=Quarter.Q3)
+    ctx = build([whole, a, b], [Teacher("教員甲", TeacherKind.FULL_TIME)])
+    tt = Timetable()
+    tt.place("A2", (TimeSlot("水", 2),), AssignmentSource.PRELOCK)
+    tt.place("A3", (TimeSlot("水", 3),), AssignmentSource.PRELOCK)
+
+    assert [v.rule_id for v in check_h7(ctx, tt, whole, (TimeSlot("水", 1),))] == ["H7"]
+
+
 def test_h7_allows_gap():
     a, b, c = make_subject("A1"), make_subject("A2"), make_subject("A3")
     ctx = build([a, b, c], [Teacher("教員甲", TeacherKind.FULL_TIME)])
