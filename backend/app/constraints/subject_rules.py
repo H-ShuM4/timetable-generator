@@ -1,17 +1,18 @@
 """科目固有の制約 H4・H8・H9・H10。"""
 from app.constraints.context import Context, Violation
-from app.models.enums import Department
 from app.models.subject import Subject
 from app.models.timeslot import TimeSlot
 from app.models.timetable import Timetable
 
 FRIDAY = "金"
 
-UNIVERSITY_REMOTE_ONLY_ON_FRIDAY = False
-"""True にすると、大学は遠隔=○ の科目のみ金曜に配置可能になる。
+FRIDAY_IS_REMOTE_ONLY = False
+"""True にすると、遠隔=○ でない科目を金曜に配置できなくする。
 
-現時点の運用は「金曜に置かれた科目を自動的にリモート扱いする」ため
-False。将来の切り替え用に残してある。
+金曜が全学的にリモートである以上、対面の科目を金曜に置くのは本来
+おかしい。ただしこれを有効にすると月〜木の 20 コマに全対面科目を
+詰めることになり配置可能性が大きく下がるため、既定では無効。
+有効化するかは実データでの検証を経て決める。
 """
 
 
@@ -46,10 +47,14 @@ def check_h4(
 def check_h8(
     context: Context, timetable: Timetable, subject: Subject, slots: tuple[TimeSlot, ...]
 ) -> list[Violation]:
-    """短大の遠隔=○ は必ず金曜。大学は既定で制約なし。"""
-    if subject.department is Department.JUNIOR:
-        if not subject.is_remote:
-            return []
+    """遠隔=○ の科目は必ず金曜に配置する。学科による差はない。
+
+    本学の金曜は全学的にリモート授業のため、遠隔で行うと決めた科目は
+    金曜に置く。以前は短期大学部だけをこの規則の対象にしていたが、
+    大学（経営・会計）でも遠隔列の ○ が配置に反映されないという運用上の
+    問題が出たため、全学科に適用する。
+    """
+    if subject.is_remote:
         return [
             Violation(
                 rule_id="H8",
@@ -60,7 +65,7 @@ def check_h8(
             if slot.day != FRIDAY
         ]
 
-    if UNIVERSITY_REMOTE_ONLY_ON_FRIDAY and not subject.is_remote:
+    if FRIDAY_IS_REMOTE_ONLY:
         return [
             Violation(
                 rule_id="H8",

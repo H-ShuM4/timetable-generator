@@ -46,11 +46,45 @@ def test_h8_junior_non_remote_is_unconstrained():
     assert check_h8(ctx, Timetable(), subject, (TimeSlot("木", 1),)) == []
 
 
-def test_h8_university_is_unconstrained_by_default():
+def test_h8_university_remote_must_be_friday():
+    # 学科によらず、遠隔=○ は金曜に置く
+    subject = make("A1", department=Department.ACCOUNTING, is_remote=True)
+    ctx = Context.from_lists([subject], [])
+    tt = Timetable()
+    assert check_h8(ctx, tt, subject, (TimeSlot("金", 1),)) == []
+    assert [v.rule_id for v in check_h8(ctx, tt, subject, (TimeSlot("木", 1),))] == ["H8"]
+
+
+def test_h8_management_remote_must_be_friday():
+    subject = make("B1", department=Department.MANAGEMENT, is_remote=True)
+    ctx = Context.from_lists([subject], [])
+    tt = Timetable()
+    assert check_h8(ctx, tt, subject, (TimeSlot("金", 3),)) == []
+    assert [v.rule_id for v in check_h8(ctx, tt, subject, (TimeSlot("月", 3),))] == ["H8"]
+
+
+def test_h8_university_non_remote_is_unconstrained_by_default():
+    # FRIDAY_IS_REMOTE_ONLY は既定で無効なので、対面科目はどこでも置ける
     subject = make("A1", department=Department.ACCOUNTING, is_remote=False)
     ctx = Context.from_lists([subject], [])
     assert check_h8(ctx, Timetable(), subject, (TimeSlot("金", 1),)) == []
     assert check_h8(ctx, Timetable(), subject, (TimeSlot("月", 1),)) == []
+
+
+def test_h8_friday_is_remote_only_flag_blocks_face_to_face_on_friday():
+    # 将来の切り替え用フラグ。有効にすると対面科目が金曜に置けなくなる
+    from app.constraints import subject_rules
+
+    subject = make("A1", department=Department.ACCOUNTING, is_remote=False)
+    ctx = Context.from_lists([subject], [])
+    tt = Timetable()
+    original = subject_rules.FRIDAY_IS_REMOTE_ONLY
+    subject_rules.FRIDAY_IS_REMOTE_ONLY = True
+    try:
+        assert [v.rule_id for v in check_h8(ctx, tt, subject, (TimeSlot("金", 1),))] == ["H8"]
+        assert check_h8(ctx, tt, subject, (TimeSlot("月", 1),)) == []
+    finally:
+        subject_rules.FRIDAY_IS_REMOTE_ONLY = original
 
 
 def test_h9_fixed_slot_must_match():
