@@ -90,6 +90,11 @@ async function startGeneration() {
         `未配置 ${result.unplaced.length} 件 / 違反 ${result.violations.length} 件`
       );
       document.querySelector('#tabs button[data-view="result"]').disabled = false;
+
+      // 生成が終わったら結果を見せる。ログは畳んで画面を広く使う。
+      // 失敗・切断のときは上で return しているので、ここへは来ない。
+      collapseLogPanel();
+      switchView("result");
     });
   } catch (error) {
     button.disabled = false;

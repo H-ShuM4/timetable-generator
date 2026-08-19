@@ -37,9 +37,17 @@ function clearLog() {
   renderLogEntries();
 }
 
+function setLogPanelCollapsed(collapsed) {
+  document.getElementById("log-panel").classList.toggle("collapsed", collapsed);
+  document.getElementById("log-toggle").textContent = collapsed ? "▲" : "▼";
+}
+
 function openLogPanel() {
-  document.getElementById("log-panel").classList.remove("collapsed");
-  document.getElementById("log-toggle").textContent = "▼";
+  setLogPanelCollapsed(false);
+}
+
+function collapseLogPanel() {
+  setLogPanelCollapsed(true);
 }
 
 function connectLogStream(sessionId, onDone) {
@@ -71,9 +79,7 @@ function connectLogStream(sessionId, onDone) {
 function initLogViewer() {
   document.getElementById("log-toggle").addEventListener("click", () => {
     const panel = document.getElementById("log-panel");
-    panel.classList.toggle("collapsed");
-    document.getElementById("log-toggle").textContent =
-      panel.classList.contains("collapsed") ? "▲" : "▼";
+    setLogPanelCollapsed(!panel.classList.contains("collapsed"));
   });
   document.getElementById("log-filter").addEventListener("change", (event) => {
     logFilter = event.target.value;
