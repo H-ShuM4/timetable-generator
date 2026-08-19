@@ -5,3 +5,4 @@ backend/.env
 backend/data/sessions/
 backend/logs/
 .pytest_cache/
+timetable-generator.zip
