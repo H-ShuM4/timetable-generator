@@ -10,8 +10,18 @@ from app.models.subject import Subject
 from app.models.timeslot import TimeSlot
 from app.models.timetable import Timetable
 
-MAX_CONSECUTIVE = 2
-"""同一教員が同一日に連続してよいコマ数の上限。"""
+MAX_CONSECUTIVE = 3
+"""同一教員が同一日に連続してよいコマ数の上限。
+
+もとは 2 だった。ゼミの隣接（課題研究と卒業研究を隣り合う時限に置く）
+を入れたところ、隣接させた時点でその教員はその曜日に 2 コマ連続する
+ため、前後にもう 1 コマあると必ず H7 に触れて弾かれた。実データでは
+隣接が成立したのは 63 組中 23 組にとどまり、未配置も 15 件に増えた。
+3 に緩めると隣接 55 組・未配置 6 件になる。
+
+1 日の総量は H11（合計 4 コマ）が別に押さえているため、緩めても
+1 人の教員に際限なくコマが積まれることはない。
+"""
 
 MAX_PERIODS_PER_DAY = 4
 """同一教員が同一日に持ってよい合計コマ数の上限。
@@ -155,7 +165,7 @@ def _longest_run(periods: set[int]) -> int:
 def check_h7(
     context: Context, timetable: Timetable, subject: Subject, slots: tuple[TimeSlot, ...]
 ) -> list[Violation]:
-    """同一教員が同一日に 3 コマ以上連続しない。
+    """同一教員が同一日に 4 コマ以上連続しない。
 
     連続の判定はクオーター区間ごとに行う。H7 は 3 科目以上をまとめて
     見る唯一の制約であり、「subject と重なる科目」を一括りにすると、

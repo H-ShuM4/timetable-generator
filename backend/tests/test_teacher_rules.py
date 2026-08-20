@@ -124,13 +124,24 @@ def test_h6_ignores_teacher_without_research_day():
     assert check_h6(ctx, Timetable(), a, (TimeSlot("火", 1),)) == []
 
 
-def test_h7_blocks_three_consecutive_periods():
+def test_h7_blocks_four_consecutive_periods():
+    subjects = [make_subject(f"A{n}") for n in range(1, 5)]
+    ctx = build(subjects, [Teacher("教員甲", TeacherKind.FULL_TIME)])
+    tt = Timetable()
+    for n in (1, 2, 3):
+        tt.place(f"A{n}", (TimeSlot("月", n),), AssignmentSource.PRELOCK)
+    violations = check_h7(ctx, tt, ctx.subjects["A4"], (TimeSlot("月", 4),))
+    assert [v.rule_id for v in violations] == ["H7"]
+
+
+def test_h7_allows_three_consecutive_periods():
+    """ゼミの隣接（課題研究＋卒業研究）に前後 1 コマ足せる余地を残す。"""
     a, b, c = make_subject("A1"), make_subject("A2"), make_subject("A3")
     ctx = build([a, b, c], [Teacher("教員甲", TeacherKind.FULL_TIME)])
     tt = Timetable()
     tt.place("A1", (TimeSlot("月", 1),), AssignmentSource.PRELOCK)
     tt.place("A2", (TimeSlot("月", 2),), AssignmentSource.PRELOCK)
-    assert [v.rule_id for v in check_h7(ctx, tt, c, (TimeSlot("月", 3),))] == ["H7"]
+    assert check_h7(ctx, tt, c, (TimeSlot("月", 3),)) == []
 
 
 def test_h7_allows_two_consecutive_periods():
@@ -159,15 +170,15 @@ def test_h7_does_not_mix_courses_from_different_quarters():
     assert check_h7(ctx, tt, whole, (TimeSlot("水", 1),)) == []
 
 
-def test_h7_still_flags_three_in_a_row_within_one_quarter():
+def test_h7_still_flags_a_run_within_one_quarter():
     whole = make_subject("A1", term=Term.FALL)
-    a = make_subject("A2", term=Term.FALL, quarter=Quarter.Q3)
-    b = make_subject("A3", term=Term.FALL, quarter=Quarter.Q3)
-    ctx = build([whole, a, b], [Teacher("教員甲", TeacherKind.FULL_TIME)])
+    others = [make_subject(f"A{n}", term=Term.FALL, quarter=Quarter.Q3) for n in (2, 3, 4)]
+    ctx = build([whole, *others], [Teacher("教員甲", TeacherKind.FULL_TIME)])
     tt = Timetable()
-    tt.place("A2", (TimeSlot("水", 2),), AssignmentSource.PRELOCK)
-    tt.place("A3", (TimeSlot("水", 3),), AssignmentSource.PRELOCK)
+    for n, period in ((2, 2), (3, 3), (4, 4)):
+        tt.place(f"A{n}", (TimeSlot("水", period),), AssignmentSource.PRELOCK)
 
+    # 後①には 水2・水3・水4 が立つので、水1 を足すと 4 コマ連続になる
     assert [v.rule_id for v in check_h7(ctx, tt, whole, (TimeSlot("水", 1),))] == ["H7"]
 
 
