@@ -19,6 +19,8 @@ _CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
 DOUBLE_SLOT_MARKER = "▲"
 ACCOUNTING_SUFFIX = ":会"
 RETAKE_MARKER = "【再】"
+REMOTE_YES = "○"
+REMOTE_NO = "×"
 INTENSIVE_DAY = "集中"
 
 COURSE_COLUMN_NAMES = ("コース", "フィールド")
@@ -169,6 +171,8 @@ def read_curriculum(path: str | Path) -> list[Subject]:
             if slot is not None:
                 slots.append(slot)
 
+        remote_mark = str(_cell(row, columns, "遠隔") or "").strip()
+
         is_double = name.startswith(DOUBLE_SLOT_MARKER)
         slots_required = 2 if is_double else 1
         requires_consecutive = is_double and base_name not in non_consecutive
@@ -185,7 +189,8 @@ def read_curriculum(path: str | Path) -> list[Subject]:
                 category=Category(str(_cell(row, columns, "科目区分")).strip()),
                 courses=_parse_courses(_course_cell(row, columns)),
                 teacher=normalize_name(_cell(row, columns, "教員氏名")),
-                is_remote=str(_cell(row, columns, "遠隔") or "").strip() == "○",
+                is_remote=remote_mark == REMOTE_YES,
+                is_remote_prohibited=remote_mark == REMOTE_NO,
                 is_joint=str(_cell(row, columns, "合同(経・会)") or "").strip() == "○",
                 slots_required=slots_required,
                 requires_consecutive=requires_consecutive,

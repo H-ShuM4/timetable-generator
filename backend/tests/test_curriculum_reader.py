@@ -116,3 +116,19 @@ def test_department_and_category_are_parsed():
     assert academic.category is Category.REQUIRED
     assert academic.term is Term.FALL
     assert academic.fixed_slot == (TimeSlot("火", 3),)
+
+
+def test_remote_column_distinguishes_maru_batsu_and_blank():
+    """遠隔列は ○ / × / 空欄 の 3 状態。× は ○ の否定ではない。"""
+    subjects = read_curriculum(CURRICULUM_XLSX)
+    yes = [s for s in subjects if s.is_remote]
+    no = [s for s in subjects if s.is_remote_prohibited]
+    blank = [s for s in subjects if not s.is_remote and not s.is_remote_prohibited]
+
+    assert not [s for s in subjects if s.is_remote and s.is_remote_prohibited]
+    # 大学シートは全行が ○ か ×、短大シートは ○ か空欄
+    assert all(s.department is not Department.JUNIOR for s in no)
+    assert all(s.department is Department.JUNIOR for s in blank)
+    # 大学 ○76 + 短大 ○13 = 89、× は全て大学の 420、空欄は短大のみ。
+    # 空欄が行数 153 でなく 149 なのは ▲科目 4 件が 2 行から 1 件へ集約されるため
+    assert (len(yes), len(no), len(blank)) == (89, 420, 149)

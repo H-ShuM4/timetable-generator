@@ -6,15 +6,6 @@ from app.models.timetable import Timetable
 
 FRIDAY = "金"
 
-FRIDAY_IS_REMOTE_ONLY = False
-"""True にすると、遠隔=○ でない科目を金曜に配置できなくする。
-
-金曜が全学的にリモートである以上、対面の科目を金曜に置くのは本来
-おかしい。ただしこれを有効にすると月〜木の 20 コマに全対面科目を
-詰めることになり配置可能性が大きく下がるため、既定では無効。
-有効化するかは実データでの検証を経て決める。
-"""
-
 
 def check_h4(
     context: Context, timetable: Timetable, subject: Subject, slots: tuple[TimeSlot, ...]
@@ -47,12 +38,18 @@ def check_h4(
 def check_h8(
     context: Context, timetable: Timetable, subject: Subject, slots: tuple[TimeSlot, ...]
 ) -> list[Violation]:
-    """遠隔=○ の科目は必ず金曜に配置する。学科による差はない。
+    """遠隔=○ は金曜のみ、遠隔=× は金曜以外。空欄はどちらでもよい。
 
-    本学の金曜は全学的にリモート授業のため、遠隔で行うと決めた科目は
-    金曜に置く。以前は短期大学部だけをこの規則の対象にしていたが、
-    大学（経営・会計）でも遠隔列の ○ が配置に反映されないという運用上の
-    問題が出たため、全学科に適用する。
+    大学（経営・会計）の金曜は全科目が遠隔授業である。したがって遠隔で
+    行うと決めた科目（○）は金曜に置き、遠隔で行えない科目（×）は金曜に
+    置けない。大学シートは全行が ○ か × のいずれかで、この 2 つで
+    金曜の可否が決まる。
+
+    短期大学部の金曜は遠隔と対面が混在する。○ は同じく金曜必須だが、
+    残りは空欄で、他のハード制約を満たすなら金曜に置いてよい。
+
+    空欄を × と同じ扱いにしてはいけない。短大の 153 科目が空欄であり、
+    それらを金曜から締め出すと配置可能性が大きく下がる。
     """
     if subject.is_remote:
         return [
@@ -65,7 +62,7 @@ def check_h8(
             if slot.day != FRIDAY
         ]
 
-    if FRIDAY_IS_REMOTE_ONLY:
+    if subject.is_remote_prohibited:
         return [
             Violation(
                 rule_id="H8",

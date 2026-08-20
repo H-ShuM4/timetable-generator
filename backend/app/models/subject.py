@@ -27,6 +27,15 @@ class Subject:
     courses: list[str] = field(default_factory=list)
     teacher: str = ""
     is_remote: bool = False
+    """Excel の `遠隔` 列が ○ か。遠隔で行うため金曜に置く（H8）。"""
+
+    is_remote_prohibited: bool = False
+    """Excel の `遠隔` 列が × か。遠隔で行えないため金曜に置けない（H8）。
+
+    ○ の否定ではない。空欄は「どちらでもよい」であり、この値も
+    `is_remote` も False になる。大学シートは全行が ○ か × で
+    埋まっているが、短大シートは ○ と空欄しか無く × が存在しない。
+    """
     is_joint: bool = False
     """Excel の `合同(経・会)` 列が ○ か。ペアリング前の生のフラグ。"""
 

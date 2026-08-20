@@ -63,28 +63,30 @@ def test_h8_management_remote_must_be_friday():
     assert [v.rule_id for v in check_h8(ctx, tt, subject, (TimeSlot("月", 3),))] == ["H8"]
 
 
-def test_h8_university_non_remote_is_unconstrained_by_default():
-    # FRIDAY_IS_REMOTE_ONLY は既定で無効なので、対面科目はどこでも置ける
-    subject = make("A1", department=Department.ACCOUNTING, is_remote=False)
-    ctx = Context.from_lists([subject], [])
-    assert check_h8(ctx, Timetable(), subject, (TimeSlot("金", 1),)) == []
-    assert check_h8(ctx, Timetable(), subject, (TimeSlot("月", 1),)) == []
-
-
-def test_h8_friday_is_remote_only_flag_blocks_face_to_face_on_friday():
-    # 将来の切り替え用フラグ。有効にすると対面科目が金曜に置けなくなる
-    from app.constraints import subject_rules
-
-    subject = make("A1", department=Department.ACCOUNTING, is_remote=False)
+def test_h8_university_remote_prohibited_cannot_be_friday():
+    # 大学の金曜は全科目が遠隔なので、遠隔=× の科目は金曜に置けない
+    subject = make("A1", department=Department.ACCOUNTING, is_remote_prohibited=True)
     ctx = Context.from_lists([subject], [])
     tt = Timetable()
-    original = subject_rules.FRIDAY_IS_REMOTE_ONLY
-    subject_rules.FRIDAY_IS_REMOTE_ONLY = True
-    try:
-        assert [v.rule_id for v in check_h8(ctx, tt, subject, (TimeSlot("金", 1),))] == ["H8"]
-        assert check_h8(ctx, tt, subject, (TimeSlot("月", 1),)) == []
-    finally:
-        subject_rules.FRIDAY_IS_REMOTE_ONLY = original
+    assert [v.rule_id for v in check_h8(ctx, tt, subject, (TimeSlot("金", 1),))] == ["H8"]
+    assert check_h8(ctx, tt, subject, (TimeSlot("月", 1),)) == []
+
+
+def test_h8_remote_prohibited_double_slot_reports_only_friday_slots():
+    subject = make("A2", department=Department.MANAGEMENT, is_remote_prohibited=True)
+    ctx = Context.from_lists([subject], [])
+    slots = (TimeSlot("木", 5), TimeSlot("金", 1))
+    assert [v.rule_id for v in check_h8(ctx, Timetable(), subject, slots)] == ["H8"]
+
+
+def test_h8_blank_remote_column_allows_friday():
+    # 空欄は × ではない。短大の 153 科目が空欄で、金曜に置いてよい
+    subject = make("J3", department=Department.JUNIOR)
+    ctx = Context.from_lists([subject], [])
+    tt = Timetable()
+    assert subject.is_remote is False and subject.is_remote_prohibited is False
+    assert check_h8(ctx, tt, subject, (TimeSlot("金", 1),)) == []
+    assert check_h8(ctx, tt, subject, (TimeSlot("月", 1),)) == []
 
 
 def test_h9_fixed_slot_must_match():
