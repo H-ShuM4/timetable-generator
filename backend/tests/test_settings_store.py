@@ -104,3 +104,32 @@ def test_short_keys_are_never_fully_exposed(tmp_path, key):
     masked = store.masked_api_key()
     assert masked.endswith("****")
     assert key not in masked
+
+
+def test_fallback_models_default_to_empty(tmp_path):
+    store = SettingsStore(tmp_path / ".env", tmp_path / "settings.json")
+    assert store.load().fallback_models == []
+    assert store.load().models_in_order() == [DEFAULT_MODEL]
+
+
+def test_fallback_models_round_trip(tmp_path):
+    store = SettingsStore(tmp_path / ".env", tmp_path / "settings.json")
+    store.save(AppSettings(model="m1", fallback_models=["m2", "m3"]))
+    loaded = store.load()
+    assert loaded.fallback_models == ["m2", "m3"]
+    assert loaded.models_in_order() == ["m1", "m2", "m3"]
+
+
+def test_fallback_models_drop_blanks_duplicates_and_the_primary(tmp_path):
+    store = SettingsStore(tmp_path / ".env", tmp_path / "settings.json")
+    store.save(AppSettings(model="m1", fallback_models=["", " m2 ", "m2", "m1", "m3"]))
+    assert store.load().fallback_models == ["m2", "m3"]
+
+
+def test_fallback_models_survive_a_non_list_value(tmp_path):
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(
+        '{"model": "m1", "max_retries": 3, "fallback_models": "m2"}', encoding="utf-8"
+    )
+    store = SettingsStore(tmp_path / ".env", settings_path)
+    assert store.load().fallback_models == []

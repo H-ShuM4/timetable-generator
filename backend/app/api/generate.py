@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.api.schemas import GenerateIn, RetargetItem
-from app.gemini.client import RealGeminiClient
+from app.gemini.client import RealGeminiClient, RotatingGeminiClient
 from app.logging.session_logger import SessionLogger
 from app.scheduler.gemini_stage import make_gemini_placer
 from app.scheduler.inherit import InheritPlan, detect_retarget_codes
@@ -71,8 +71,29 @@ async def start_generation(session_id: str, payload: GenerateIn) -> dict:
 
     placer = None
     if mode is not GenerationMode.MOCK:
+        models = settings.models_in_order()
+
+        def announce_switch(exhausted: str, next_model: str | None) -> None:
+            if next_model is None:
+                logger.warn(
+                    f"{exhausted} が利用枠に達しました。切り替え先がもうありません",
+                    stage="Gemini",
+                )
+            else:
+                logger.warn(
+                    f"{exhausted} が利用枠に達しました。{next_model} に切り替えます",
+                    stage="Gemini",
+                )
+
         try:
-            gemini_client = RealGeminiClient(api_key, settings.model)
+            gemini_client = RotatingGeminiClient(
+                lambda model: RealGeminiClient(api_key, model),
+                models,
+                on_switch=announce_switch,
+            )
+            # RealGeminiClient は生成時に API キーを検証するため、
+            # ここで先頭のモデルを 1 つ作って不正なキーを早期に弾く。
+            RealGeminiClient(api_key, models[0])
         except Exception as error:
             raise HTTPException(
                 status_code=400,
@@ -81,6 +102,12 @@ async def start_generation(session_id: str, payload: GenerateIn) -> dict:
                     f"API キーが不正である可能性があります: {error}"
                 ),
             ) from error
+        if len(models) > 1:
+            logger.info(
+                f"モデルを {len(models)} 個使います（枠切れ時に順に切り替え）: "
+                f"{'→'.join(models)}",
+                stage="Stage 0",
+            )
         placer = make_gemini_placer(gemini_client, settings.max_retries)
 
     inherit_plan = None

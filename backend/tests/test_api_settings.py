@@ -52,3 +52,41 @@ def test_put_settings_rejects_zero_retries():
         "model": "gemini-2.5-flash", "max_retries": 0
     })
     assert response.status_code == 422
+
+
+def test_settings_default_to_no_fallback_models():
+    assert client.get("/api/settings").json()["fallback_models"] == []
+
+
+def test_put_settings_persists_fallback_models():
+    body = client.put("/api/settings", json={
+        "model": "gemini-3.7-flash",
+        "max_retries": 3,
+        "fallback_models": ["gemini-3.6-flash", "gemini-3.5-flash"],
+    }).json()
+    assert body["fallback_models"] == ["gemini-3.6-flash", "gemini-3.5-flash"]
+    assert client.get("/api/settings").json()["fallback_models"] == [
+        "gemini-3.6-flash", "gemini-3.5-flash"
+    ]
+
+
+def test_omitting_fallback_models_clears_them():
+    """事務局が設定を保存し直したときに開発用の指定が残らないようにする。"""
+    client.put("/api/settings", json={
+        "model": "gemini-3.7-flash",
+        "max_retries": 3,
+        "fallback_models": ["gemini-3.6-flash"],
+    })
+    body = client.put("/api/settings", json={
+        "model": "gemini-3.7-flash", "max_retries": 3,
+    }).json()
+    assert body["fallback_models"] == []
+
+
+def test_fallback_models_cannot_repeat_the_primary_model():
+    body = client.put("/api/settings", json={
+        "model": "gemini-3.7-flash",
+        "max_retries": 3,
+        "fallback_models": ["gemini-3.7-flash", "gemini-3.6-flash"],
+    }).json()
+    assert body["fallback_models"] == ["gemini-3.6-flash"]

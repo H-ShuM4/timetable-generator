@@ -4,7 +4,7 @@ API キーは .env、それ以外は data/settings.json に置く。
 フロントへ返すのはマスク済みの文字列だけで、全文は返さない。
 """
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 API_KEY_NAME = "GEMINI_API_KEY"
@@ -25,9 +25,38 @@ DEFAULT_SETTINGS_PATH = _BACKEND_DIR / "data" / "settings.json"
 class AppSettings:
     model: str = DEFAULT_MODEL
     max_retries: int = DEFAULT_MAX_RETRIES
+    fallback_models: list[str] = field(default_factory=list)
+    """model の枠が尽きたときに順に使う予備モデル。既定は空。
+
+    開発時に無料枠を足し合わせるための機能である。空のときは model
+    だけを使うため、事務局の運用では従来と完全に同じ挙動になる。
+    """
+
+    def models_in_order(self) -> list[str]:
+        """実際に使う順に並べたモデル名。先頭が model。"""
+        return [self.model, *self.fallback_models]
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+def normalize_fallback_models(value, model: str) -> list[str]:
+    """予備モデルの一覧を整える。
+
+    空文字・重複・model と同じ名前を落とす。model は必ず先頭で使われる
+    ので、予備に重ねて入っていると同じモデルへ二度切り替えることになる。
+    """
+    if not isinstance(value, (list, tuple)):
+        return []
+    seen = {model.strip()}
+    result: list[str] = []
+    for item in value:
+        name = str(item).strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        result.append(name)
+    return result
 
 
 class SettingsStore:
@@ -49,9 +78,13 @@ class SettingsStore:
             raw = json.loads(self.settings_path.read_text(encoding="utf-8"))
             if not isinstance(raw, dict):
                 raise ValueError("settings.json の内容がオブジェクトではありません")
+            model = raw.get("model", DEFAULT_MODEL) or DEFAULT_MODEL
             return AppSettings(
-                model=raw.get("model", DEFAULT_MODEL) or DEFAULT_MODEL,
+                model=model,
                 max_retries=max(1, int(raw.get("max_retries", DEFAULT_MAX_RETRIES))),
+                fallback_models=normalize_fallback_models(
+                    raw.get("fallback_models", []), model
+                ),
             )
         except (json.JSONDecodeError, ValueError, TypeError, OSError):
             return AppSettings()
@@ -60,6 +93,9 @@ class SettingsStore:
         self.settings_path.parent.mkdir(parents=True, exist_ok=True)
         payload = settings.to_dict()
         payload["max_retries"] = max(1, int(payload["max_retries"]))
+        payload["fallback_models"] = normalize_fallback_models(
+            payload["fallback_models"], payload["model"]
+        )
         self.settings_path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )

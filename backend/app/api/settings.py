@@ -15,6 +15,7 @@ def _current() -> SettingsOut:
     return SettingsOut(
         model=settings.model,
         max_retries=settings.max_retries,
+        fallback_models=settings.fallback_models,
         api_key_masked=masked,
         has_api_key=masked is not None,
     )
@@ -27,7 +28,11 @@ async def get_settings() -> SettingsOut:
 
 @router.put("", response_model=SettingsOut)
 async def put_settings(payload: SettingsIn) -> SettingsOut:
-    store.save(AppSettings(model=payload.model, max_retries=payload.max_retries))
+    store.save(AppSettings(
+        model=payload.model,
+        max_retries=payload.max_retries,
+        fallback_models=payload.fallback_models,
+    ))
     return _current()
 
 

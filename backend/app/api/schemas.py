@@ -29,6 +29,7 @@ class UploadResponse(BaseModel):
 class SettingsOut(BaseModel):
     model: str
     max_retries: int
+    fallback_models: list[str]
     api_key_masked: str | None
     has_api_key: bool
 
@@ -36,6 +37,7 @@ class SettingsOut(BaseModel):
 class SettingsIn(BaseModel):
     model: str = Field(min_length=1)
     max_retries: int = Field(ge=1, le=10)
+    fallback_models: list[str] = Field(default_factory=list, max_length=10)
 
 
 class ApiKeyIn(BaseModel):

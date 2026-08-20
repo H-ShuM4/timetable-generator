@@ -15,33 +15,33 @@ from app.models.timetable import AssignmentSource, Timetable
 
 
 def chunk_codes(context: Context, codes: list[str]) -> list[tuple[str, list[str]]]:
-    """学科 × 年次 × 開講期 × コースでチャンクに割る。
+    """学科 × 年次 × 開講期でチャンクに割る。
 
     年次を鍵に含めるのは、H2 と H3 が「学科 × 年次」で衝突を判定する
     ためである。年次で切ると各チャンクが互いに衝突しうる科目だけの塊に
     なり、Gemini が考慮すべき範囲とチャンクの範囲が一致する。
+
+    **コースを鍵に含めない。** H2・H3 はコースを見ないので、コースで
+    細分しても衝突の判定範囲は変わらず、リクエスト数だけが増える。
+    実データではコースを鍵から外すことでチャンクが 54 個から 20 個へ
+    減った。Gemini の無料枠は 1 モデルあたり 1 日 20 リクエストなので、
+    この差が「1 回の生成が完走できるかどうか」を分ける。
+
+    併合してもプロンプトは最大 6,429 文字（併合前 4,708 文字）にしか
+    ならず、モデルの入力上限に対して十分小さい。
     """
     groups: dict[tuple, list[str]] = defaultdict(list)
     for code in codes:
         subject = context.subjects.get(code)
         if subject is None:
             continue
-        key = (
-            subject.department.value,
-            subject.year,
-            subject.term.value,
-            tuple(sorted(subject.courses)),
-        )
+        key = (subject.department.value, subject.year, subject.term.value)
         groups[key].append(code)
 
-    chunks: list[tuple[str, list[str]]] = []
-    for key, group_codes in groups.items():
-        department, year, term, courses = key
-        label = f"{department}{year}年・{term}"
-        if courses:
-            label += f"・{'/'.join(courses)}"
-        chunks.append((label, group_codes))
-    return chunks
+    return [
+        (f"{department}{year}年・{term}", group_codes)
+        for (department, year, term), group_codes in groups.items()
+    ]
 
 
 def make_gemini_placer(client: GeminiClient, max_retries: int):
@@ -88,8 +88,14 @@ def make_gemini_placer(client: GeminiClient, max_retries: int):
                     stage="Gemini",
                 )
                 continue
+            # どのモデルが応答したかは呼び出し**後**に読む。枠切れで別の
+            # モデルへ切り替わった場合、送信前に読んだ名前とは食い違う。
+            # 単一モデルではこの属性が無く、ログは従来どおりになる。
+            model = getattr(client, "current_model", None)
+            answered_by = f"、{model}" if model else ""
             logger.info(
-                f"{label}: 応答を受信（{time.monotonic() - started:.1f}秒）", stage="Gemini"
+                f"{label}: 応答を受信（{time.monotonic() - started:.1f}秒{answered_by}）",
+                stage="Gemini",
             )
 
             try:

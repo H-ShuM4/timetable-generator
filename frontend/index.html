@@ -74,6 +74,10 @@
         <label for="model">モデル</label>
         <input list="model-options" id="model">
         <datalist id="model-options">
+          <option value="gemini-3.7-flash"></option>
+          <option value="gemini-3.6-flash"></option>
+          <option value="gemini-3.5-flash"></option>
+          <option value="gemini-3-flash"></option>
           <option value="gemini-2.5-flash"></option>
           <option value="gemini-2.5-pro"></option>
           <option value="gemini-2.5-flash-lite"></option>
@@ -83,6 +87,24 @@
         <label for="max-retries">再試行回数</label>
         <input type="number" id="max-retries" min="1" max="10">
       </div>
+      <details id="dev-settings">
+        <summary>開発者向け：予備モデル</summary>
+        <p class="hint">
+          無料枠は 1 モデルあたり 1 日 20 リクエストです。1 回の生成には
+          20 リクエスト（再試行が入ると最大 60）かかるため、1 モデルでは
+          最適化モードを完走できないことがあります。ここで予備モデルを
+          選ぶと、上のモデルの枠が尽きた時点で順に切り替わります。
+        </p>
+        <p class="hint">
+          <strong>実務では何も選ばないでください。</strong>
+          選択なしの場合は上のモデルだけを使う従来どおりの動作です。
+        </p>
+        <div id="fallback-models"></div>
+        <div class="field">
+          <label for="fallback-extra">その他</label>
+          <input id="fallback-extra" placeholder="カンマ区切りで追加">
+        </div>
+      </details>
       <button id="save-settings">設定を保存</button>
       <div id="settings-status"></div>
     </section>

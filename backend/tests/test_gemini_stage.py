@@ -73,13 +73,14 @@ def test_chunk_codes_splits_by_year():
     assert "1年" in by_size[0][0]
 
 
-def test_chunk_codes_splits_elective_required_by_course():
+def test_chunk_codes_keeps_different_courses_together():
+    """コースは H2・H3 の判定に関わらないので、分けずに 1 リクエストで送る。"""
     subjects = [
         make("S1", category=Category.ELECTIVE_REQUIRED, courses=["情報コース"]),
         make("S2", category=Category.ELECTIVE_REQUIRED, courses=["経営コース"]),
     ]
     ctx = Context.from_lists(subjects, [])
-    assert len(chunk_codes(ctx, ["S1", "S2"])) == 2
+    assert chunk_codes(ctx, ["S1", "S2"]) == [("経営1年・前期", ["S1", "S2"])]
 
 
 def test_placer_places_valid_response(tmp_path):
@@ -190,3 +191,10 @@ def test_placer_ignores_codes_not_in_the_request(tmp_path):
     make_gemini_placer(client, max_retries=2)(ctx, tt, ["A1"], logger)
     assert tt.placed_codes() == {"A1"}
     logger.close()
+
+
+def test_chunk_codes_on_real_data_fits_the_free_tier(real_context, real_gemini_codes):
+    """実データのチャンク数。無料枠は 1 モデルあたり 1 日 20 リクエスト。"""
+    chunks = chunk_codes(real_context, real_gemini_codes)
+    assert len(chunks) == 20
+    assert sum(len(codes) for _, codes in chunks) == len(real_gemini_codes)
