@@ -82,8 +82,16 @@ function renderGrid() {
   const rows = PERIODS.map((period) => {
     const cells = DAYS.map((day) => {
       const label = `${day}${period}`;
+      // 各コマの中は 1年→2年→3年→4年 の順に並べる。同じ年次の中は
+      // 科目名、さらに授業コードで並べ、コマを移動しても順序が動かない
+      // ようにする（renderTimetable がサーバから取り直して再描画する）。
       const cards = visible
         .filter((p) => p.slots.includes(label))
+        .sort((a, b) =>
+          a.year - b.year ||
+          a.name.localeCompare(b.name, "ja") ||
+          a.code.localeCompare(b.code)
+        )
         .map((p) => cardHtml(p, label, violating.has(p.code)))
         .join("");
       return `<td data-slot="${label}">${cards}</td>`;
