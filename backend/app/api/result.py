@@ -48,19 +48,39 @@ def _to_subject_refs(codes: list[str], context) -> list[SubjectRef]:
     return refs
 
 
-def _joint_group(context, subject) -> list[str]:
-    """subject と一緒に動かすべき科目コードの一覧。
+def _linked_group(context, subject) -> list[str]:
+    """subject と同じコマに置かれるべき科目コードの一覧。
 
-    合同科目は経営側と会計側の 2 行に分かれているが物理的には 1 つの
-    授業なので、片方を動かせばもう片方も同じコマへ動く。合同でなければ
-    その科目だけを返す。
+    2 種類の結び付きがあり、どちらも「同じ曜日・時限」を要求する。
+
+    - `joint_id`（H4）：経営側と会計側に分かれた 1 つの合同授業
+    - `pair_id`（H12）：同じ教員が前期と後期に続けて持つ対応科目
+
+    両方を持つ科目があるため、**推移的に**たどる必要がある。課題研究Ⅰ
+    の経営側を動かすと、合同相手の会計側と、後期の課題研究Ⅱの経営側・
+    会計側まで、4 科目が一緒に動く。片方だけ動かすと H4 か H12 に必ず
+    引っかかるので、まとめて動かす以外に選択肢はない。
     """
-    if not subject.joint_id:
-        return [subject.code]
-    return sorted(
-        code for code, other in context.subjects.items()
-        if other.joint_id == subject.joint_id
-    )
+    by_key: dict[tuple[str, str], list[str]] = {}
+    for code, other in context.subjects.items():
+        for attribute in ("joint_id", "pair_id"):
+            value = getattr(other, attribute)
+            if value:
+                by_key.setdefault((attribute, value), []).append(code)
+
+    group = {subject.code}
+    queue = [subject.code]
+    while queue:
+        current = context.subjects[queue.pop()]
+        for attribute in ("joint_id", "pair_id"):
+            value = getattr(current, attribute)
+            if not value:
+                continue
+            for code in by_key.get((attribute, value), ()):
+                if code not in group:
+                    group.add(code)
+                    queue.append(code)
+    return sorted(group)
 
 
 @router.get("/{session_id}", response_model=ResultOut)
@@ -119,9 +139,9 @@ async def move(session_id: str, payload: MoveIn) -> MoveOut:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
     timetable = data.result.timetable
-    group = _joint_group(context, subject)
+    group = _linked_group(context, subject)
 
-    # グループを一度すべて外してから検証する。合同ペアは H4 が同一コマを
+    # グループを一度すべて外してから検証する。H4 と H12 が同一コマを
     # 要求するため、片方を置いたまま相手を動かそうとすると必ず弾かれる。
     original = {
         code: (timetable.slot_of(code), timetable.assignments[code].source)

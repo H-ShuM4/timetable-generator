@@ -5,6 +5,7 @@
 変わってしまう。実際、1〜4 限への集約はソルバーにしか入っておらず、
 最適化モードでは効いていなかった。
 """
+from app.constraints.context import Context
 from app.models.enums import Department
 from app.models.subject import Subject
 from app.models.timeslot import TimeSlot
@@ -13,6 +14,13 @@ from app.models.timetable import Timetable
 
 LATE_PERIOD = 5
 """できれば避けたい時限。"""
+
+DIFFERENT_DAY_DISTANCE = 10
+"""隣接させたい相手と曜日が違う場合の距離。
+
+時限差の最大は 4 なので、同じ曜日であればどれだけ離れていても
+別の曜日より望ましい、という順序になる。
+"""
 
 PREFER_EARLY_PERIODS = (
     Department.MANAGEMENT,
@@ -33,35 +41,85 @@ PREFER_EARLY_PERIODS = (
 """
 
 
+def _adjacency_distance(
+    context: Context | None,
+    timetable: Timetable,
+    subject: Subject,
+    slots: tuple[TimeSlot, ...],
+) -> int:
+    """隣接させたい相手からどれだけ離れているか。小さいほど望ましい。
+
+    課題研究（3 年）と卒業研究（4 年）を同じゼミ内で隣り合う時限に置く
+    ための指標である。ゼミ内で 3 年生と 4 年生が交流できるようにという
+    運用上の狙いがある。
+
+    同じ曜日で 1 時限違いなら 0。同じ曜日で離れていればその差、別の
+    曜日なら一律に大きな値を返す。相手がまだ置かれていない場合や
+    `adjacent_id` を持たない場合は 0 を返し、順位に影響させない。
+
+    H1 により同一教員は同じコマに置けないので、両者が重なることはない。
+    """
+    if context is None or not subject.adjacent_id:
+        return 0
+
+    best = None
+    for code, other in context.subjects.items():
+        if code == subject.code or other.adjacent_id != subject.adjacent_id:
+            continue
+        for placed in timetable.slot_of(code):
+            for slot in slots:
+                distance = (
+                    abs(placed.period - slot.period)
+                    if placed.day == slot.day
+                    else DIFFERENT_DAY_DISTANCE
+                )
+                best = distance if best is None else min(best, distance)
+    return 0 if best is None else best
+
+
 def placement_preference(
-    timetable: Timetable, subject: Subject, slots: tuple[TimeSlot, ...]
+    timetable: Timetable,
+    subject: Subject,
+    slots: tuple[TimeSlot, ...],
+    context: Context | None = None,
 ) -> tuple:
     """候補コマ集合の望ましさ。小さいほど望ましい。
 
     これは制約ではなく好みである。5 限しか空いていなければ 5 限に置く。
     配置可能なものを拒否することは一切しない。
 
-    順に、(1) 避けたい時限を使う数、(2) 既に置かれている科目の数、
-    (3) 曜日・時限。(3) は同点時の決定性のためだけにある。
+    順に、(1) 避けたい時限を使う数、(2) 隣接させたい相手からの距離、
+    (3) 既に置かれている科目の数、(4) 曜日・時限。(4) は同点時の
+    決定性のためだけにある。
 
-    (2) が要る理由：候補は 月1→月2→…→金5 の順に並んでいるため単純に
+    (3) が要る理由：候補は 月1→月2→…→金5 の順に並んでいるため単純に
     先頭を採ると月曜から順に埋まる。実データでは月 162・火 171 に対して
     木 6 という偏りが出た。偏りは見た目だけの問題ではなく、同じ曜日に
     科目が集中することで教員重複や必修衝突を生み、水・木が空いているのに
     置けない科目を作る。
+
+    1〜4 限への集約を隣接より優先するのは、5 限を避けるほうが全学の
+    時間割に効くのに対し、隣接はゼミ内の都合にとどまるためである。
     """
     late = 0
     if subject.department in PREFER_EARLY_PERIODS:
         late = sum(1 for slot in slots if slot.period == LATE_PERIOD)
     return (
         late,
+        _adjacency_distance(context, timetable, subject, slots),
         sum(len(timetable.occupied_by(slot)) for slot in slots),
         tuple((slot.day, slot.period) for slot in slots),
     )
 
 
 def best_option(
-    timetable: Timetable, subject: Subject, options: list[tuple[TimeSlot, ...]]
+    timetable: Timetable,
+    subject: Subject,
+    options: list[tuple[TimeSlot, ...]],
+    context: Context | None = None,
 ) -> tuple[TimeSlot, ...]:
     """候補のうち最も望ましいコマ集合を返す。"""
-    return min(options, key=lambda slots: placement_preference(timetable, subject, slots))
+    return min(
+        options,
+        key=lambda slots: placement_preference(timetable, subject, slots, context),
+    )

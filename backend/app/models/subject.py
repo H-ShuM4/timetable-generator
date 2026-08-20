@@ -42,6 +42,21 @@ class Subject:
     joint_id: str | None = None
     """ペアリング成立後に付与される合同グループ ID。"""
 
+    pair_id: str | None = None
+    """前期・後期をまたぐ対応付けの ID（H12）。
+
+    日本語リテラシーⅠとⅡのように、同じ教員が続けて受け持つ 2 科目に
+    同じ値が入る。H12 はこれらを同じ曜日・時限に置くことを要求する。
+    """
+
+    adjacent_id: str | None = None
+    """隣り合う時限に置きたい科目群の ID。
+
+    課題研究（3 年）と卒業研究（4 年）を同じゼミ内で隣接させ、学年を
+    またいだ交流ができるようにする。**制約ではなく好みである。**
+    隣接できなければ離れたコマに置く。
+    """
+
     slots_required: int = 1
     requires_consecutive: bool = False
     fixed_slot: tuple[TimeSlot, ...] | None = None

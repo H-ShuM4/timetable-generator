@@ -1,4 +1,4 @@
-"""科目固有の制約 H4・H8・H9・H10。"""
+"""科目固有の制約 H4・H8・H9・H10・H12。"""
 from app.constraints.context import Context, Violation
 from app.models.subject import Subject
 from app.models.timeslot import TimeSlot
@@ -126,4 +126,43 @@ def check_h10(
     )]
 
 
-SUBJECT_RULES = (check_h4, check_h8, check_h9, check_h10)
+def check_h12(
+    context: Context, timetable: Timetable, subject: Subject, slots: tuple[TimeSlot, ...]
+) -> list[Violation]:
+    """前期・後期にまたがる対応科目は同曜日・同時限。
+
+    日本語リテラシーⅠとⅡ、課題研究ⅠとⅡ、卒業研究ⅠとⅡのように、
+    同じ教員が前期と後期に続けて受け持つ科目を指す。学生から見て
+    通年で同じコマに出席できるようにするための運用規則である。
+
+    H4 と形は同じだが対象が違う。H4 は同じ学期の経営・会計の合同科目、
+    H12 は同じ学科の前期・後期の対応科目である。両方が付く科目もある
+    （課題研究Ⅰは経営・会計で合同かつ、課題研究Ⅱと対応する）。
+
+    対応関係は `config/paired_subjects.json` で定義する。
+    """
+    if not subject.pair_id:
+        return []
+
+    candidate = set(slots)
+    violations: list[Violation] = []
+    for code, other in context.subjects.items():
+        if code == subject.code or other.pair_id != subject.pair_id:
+            continue
+        placed = timetable.slot_of(code)
+        if not placed:
+            continue
+        if set(placed) != candidate:
+            violations.append(Violation(
+                rule_id="H12",
+                subject_code=subject.code,
+                message=(
+                    f"対応科目 {other.name}（{other.term.value}）は "
+                    f"{'・'.join(str(s) for s in placed)} に配置されています"
+                ),
+                related_code=code,
+            ))
+    return violations
+
+
+SUBJECT_RULES = (check_h4, check_h8, check_h9, check_h10, check_h12)

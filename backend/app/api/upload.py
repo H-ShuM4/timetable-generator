@@ -9,6 +9,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from app.api.schemas import UploadResponse, UploadSummary, WarningOut
 from app.ingest.curriculum_reader import read_curriculum_rows
 from app.ingest.joint_pairing import assign_joint_ids
+from app.ingest.pair_linking import assign_pair_ids
 from app.ingest.markitdown_fallback import read_curriculum_with_fallback
 from app.ingest.teacher_reader import read_teachers
 from app.ingest.validators import check_partial_slots, collect_warnings
@@ -91,6 +92,7 @@ async def upload(
         logger.close()
 
     joint_mismatches = assign_joint_ids(subjects)
+    assign_pair_ids(subjects)
     warnings = collect_warnings(subjects, teacher_map, joint_mismatches) + partial_slot_warnings
 
     data = SessionData(

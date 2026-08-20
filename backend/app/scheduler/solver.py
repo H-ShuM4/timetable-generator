@@ -13,6 +13,19 @@ from app.scheduler.preference import best_option
 DEFAULT_NODE_LIMIT = 200_000
 
 
+def _adjacent_partner_placed(context: Context, timetable: Timetable, code: str) -> bool:
+    """隣接させたい相手が既に配置済みか。"""
+    subject = context.subjects[code]
+    if not subject.adjacent_id:
+        return False
+    return any(
+        other.adjacent_id == subject.adjacent_id
+        and other_code != code
+        and timetable.is_placed(other_code)
+        for other_code, other in context.subjects.items()
+    )
+
+
 def solve(
     context: Context,
     timetable: Timetable,
@@ -45,8 +58,17 @@ def solve(
             code: feasible_slot_sets(context, timetable, context.subjects[code])
             for code in remaining
         }
-        # 候補数が同じ場合は授業コード順にして結果を決定的にする
-        code = min(remaining, key=lambda c: (len(options_by_code[c]), c))
+        # 候補数が同じ場合は、隣接させたい相手が既に置かれている科目を
+        # 先に確定させる。間に他の科目が入って隣のコマが埋まる前に置けば
+        # 隣接が成立しやすい。最後は授業コード順にして結果を決定的にする。
+        code = min(
+            remaining,
+            key=lambda c: (
+                len(options_by_code[c]),
+                0 if _adjacent_partner_placed(context, timetable, c) else 1,
+                c,
+            ),
+        )
         remaining.remove(code)
 
         options = options_by_code[code]
@@ -54,7 +76,7 @@ def solve(
             unplaced.append(code)
             continue
         timetable.place(
-            code, best_option(timetable, context.subjects[code], options),
+            code, best_option(timetable, context.subjects[code], options, context),
             AssignmentSource.SOLVER,
         )
 
