@@ -11,6 +11,7 @@ from app.constraints.context import Context
 from app.models.timeslot import DAYS, PERIODS, TimeSlot
 from app.models.timetable import Timetable
 from app.scheduler.candidates import feasible_slot_sets
+from app.scheduler.preference import placement_preference
 
 MAX_CANDIDATES_SHOWN = 25
 """1 科目あたりプロンプトに載せる候補数の上限。"""
@@ -86,6 +87,13 @@ def build_placement_prompt(
         "- この依頼の中で配置する科目同士も、同じ教員が同じコマに重ならないようにしてください。",
         "- 同じ学科・同じ年次の必修科目同士を同じコマに置かないでください。",
         "- 同じ教員が同じ曜日に 3 コマ以上連続しないようにしてください。",
+        "- 同じ教員が同じ曜日に 5 コマ以上持たないようにしてください。",
+        "",
+        "## 望ましい配置",
+        "- できるだけ 1〜4 限に置いてください。5 限は他に置けない場合だけ使ってください。",
+        "  （本システムの対象外である教職課程の科目が 4 限・5 限に入るためです）",
+        "- 候補は望ましい順に並べています。前の方にあるものを優先してください。",
+        "- 特定の曜日に偏らせず、月〜金へ散らしてください。",
         "",
         "## 配置対象",
     ]
@@ -94,7 +102,13 @@ def build_placement_prompt(
         subject = context.subjects.get(code)
         if subject is None:
             continue
-        options = feasible_slot_sets(context, timetable, subject)[:MAX_CANDIDATES_SHOWN]
+        # 望ましい順に並べてから上限で切る。並べ替えないと、候補が
+        # 月1→月2→…→金5 の順のまま切られるため、5 限や特定の曜日が
+        # 残ったり、望ましいコマが上限の外へこぼれたりする。
+        options = sorted(
+            feasible_slot_sets(context, timetable, subject),
+            key=lambda slots: placement_preference(timetable, subject, slots),
+        )[:MAX_CANDIDATES_SHOWN]
         candidates = ", ".join(_slots_label(slots) for slots in options) or "なし"
         quarter = f"/{subject.quarter.value}" if subject.quarter else ""
         lines.append(

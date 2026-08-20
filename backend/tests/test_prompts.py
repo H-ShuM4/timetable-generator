@@ -131,3 +131,31 @@ def test_parse_response_rejects_malformed_payloads(payload):
 def test_response_schema_declares_placements():
     assert RESPONSE_SCHEMA["type"] == "object"
     assert "placements" in RESPONSE_SCHEMA["properties"]
+
+
+def _prompt_for(subject, subjects=None, timetable=None):
+    ctx = Context.from_lists(subjects or [subject], [])
+    return build_placement_prompt(ctx, timetable or Timetable(), [subject.code])
+
+
+def test_prompt_asks_for_periods_one_to_four():
+    """ソルバーだけでなく AI にも 1〜4 限への集約を伝える。"""
+    text = _prompt_for(make("A1"))
+    assert "できるだけ 1〜4 限に置いてください" in text
+
+
+def test_prompt_states_the_daily_period_cap():
+    assert "5 コマ以上持たない" in _prompt_for(make("A1"))
+
+
+def test_candidates_are_listed_in_preference_order():
+    """5 限より前の時限が先に並ぶ。上限で切られても望ましい候補が残る。"""
+    subject = make("A1")
+    line = next(
+        line for line in _prompt_for(subject).splitlines() if line.startswith("- A1 |")
+    )
+    candidates = line.split("候補: ", 1)[1].split(", ")
+    assert candidates[0].endswith(("1", "2", "3", "4"))
+    fifth = [i for i, c in enumerate(candidates) if c.endswith("5")]
+    earlier = [i for i, c in enumerate(candidates) if not c.endswith("5")]
+    assert not fifth or not earlier or min(fifth) > max(earlier)
