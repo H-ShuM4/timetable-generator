@@ -91,3 +91,68 @@ def test_move_rejects_bad_slot_label():
         f"/api/result/{session_id}/move", json={"code": "A1", "slots": ["土1"]}
     )
     assert response.status_code == 400
+
+
+def _prepare_joint():
+    """合同ペア（経営側・会計側）を同じコマに置いたセッションを作る。"""
+    from app.models.enums import Category, Department, TeacherKind, Term
+    from app.models.subject import Subject
+    from app.models.teacher import Teacher
+    from app.models.timeslot import TimeSlot
+    from app.models.timetable import AssignmentSource
+    from app.scheduler.pipeline import GenerationResult
+    from app.models.timetable import Timetable
+    from app.session_store import SessionData, store
+
+    def make(code, dept, joint_id=None, teacher="専任甲"):
+        return Subject(
+            code=code, name=code, base_name="合同科目", department=dept, year=1,
+            term=Term.SPRING, quarter=None, category=Category.ELECTIVE,
+            teacher=teacher, joint_id=joint_id,
+        )
+
+    a = make("A1", Department.ACCOUNTING, joint_id="J001")
+    b = make("B1", Department.MANAGEMENT, joint_id="J001")
+    blocker = make("B9", Department.MANAGEMENT, teacher="専任甲")
+    teachers = {"専任甲": Teacher("専任甲", TeacherKind.FULL_TIME)}
+
+    timetable = Timetable()
+    timetable.place("A1", (TimeSlot("月", 1),), AssignmentSource.SOLVER)
+    timetable.place("B1", (TimeSlot("月", 1),), AssignmentSource.SOLVER)
+    timetable.place("B9", (TimeSlot("水", 3),), AssignmentSource.SOLVER)
+
+    data = SessionData(subjects=[a, b, blocker], teachers=teachers)
+    data.result = GenerationResult(timetable=timetable)
+    return store.create(data), data
+
+
+def test_moving_one_side_of_a_joint_pair_moves_both():
+    session_id, data = _prepare_joint()
+
+    response = client.post(
+        f"/api/result/{session_id}/move", json={"code": "B1", "slots": ["木4"]}
+    )
+    assert response.status_code == 200
+    assert response.json()["applied"] is True
+
+    placements = {p["code"]: p for p in client.get(f"/api/result/{session_id}").json()["placements"]}
+    assert placements["B1"]["slots"] == ["木4"]
+    assert placements["A1"]["slots"] == ["木4"], "会計側も一緒に動くこと"
+    assert placements["A1"]["source"] == "manual"
+
+
+def test_a_joint_move_blocked_for_the_partner_moves_nothing():
+    session_id, data = _prepare_joint()
+
+    # 水3 には同じ教員の別科目 B9 が居るので H1 で弾かれる
+    response = client.post(
+        f"/api/result/{session_id}/move", json={"code": "A1", "slots": ["水3"]}
+    )
+    body = response.json()
+    assert body["applied"] is False
+    assert "H1" in {v["rule_id"] for v in body["violations"]}
+
+    placements = {p["code"]: p for p in client.get(f"/api/result/{session_id}").json()["placements"]}
+    assert placements["A1"]["slots"] == ["月1"], "拒否されたら元の位置のまま"
+    assert placements["B1"]["slots"] == ["月1"]
+    assert placements["A1"]["source"] == "solver", "source も元のまま"

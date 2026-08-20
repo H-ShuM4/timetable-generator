@@ -48,6 +48,21 @@ def _to_subject_refs(codes: list[str], context) -> list[SubjectRef]:
     return refs
 
 
+def _joint_group(context, subject) -> list[str]:
+    """subject と一緒に動かすべき科目コードの一覧。
+
+    合同科目は経営側と会計側の 2 行に分かれているが物理的には 1 つの
+    授業なので、片方を動かせばもう片方も同じコマへ動く。合同でなければ
+    その科目だけを返す。
+    """
+    if not subject.joint_id:
+        return [subject.code]
+    return sorted(
+        code for code, other in context.subjects.items()
+        if other.joint_id == subject.joint_id
+    )
+
+
 @router.get("/{session_id}", response_model=ResultOut)
 async def get_result(session_id: str) -> ResultOut:
     data = _require_session(session_id)
@@ -104,12 +119,39 @@ async def move(session_id: str, payload: MoveIn) -> MoveOut:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
     timetable = data.result.timetable
-    violations = check_placement(context, timetable, subject, slots)
+    group = _joint_group(context, subject)
+
+    # グループを一度すべて外してから検証する。合同ペアは H4 が同一コマを
+    # 要求するため、片方を置いたまま相手を動かそうとすると必ず弾かれる。
+    original = {
+        code: (timetable.slot_of(code), timetable.assignments[code].source)
+        for code in group
+        if timetable.is_placed(code)
+    }
+    for code in original:
+        timetable.remove(code)
+
+    violations = []
+    for code in group:
+        violations.extend(check_placement(context, timetable, context.subjects[code], slots))
+
+    if not violations:
+        for code in group:
+            timetable.place(code, slots, AssignmentSource.MANUAL)
+        # 置いた結果で全体を検証し直す。グループ内で新たな違反が出た場合は
+        # 移動そのものを取り消す。
+        recheck = validate_all(context, timetable)
+        introduced = [v for v in recheck if v.subject_code in group]
+        if introduced:
+            violations = introduced
+            for code in group:
+                timetable.remove(code)
+
     if violations:
+        for code, (slots_before, source) in original.items():
+            timetable.place(code, slots_before, source)
         return MoveOut(applied=False, violations=[_to_violation(v) for v in violations])
 
-    timetable.remove(payload.code)
-    timetable.place(payload.code, slots, AssignmentSource.MANUAL)
     data.result.violations = validate_all(context, timetable)
     store.save_result(session_id)
 
