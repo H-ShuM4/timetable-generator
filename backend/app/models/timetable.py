@@ -26,6 +26,8 @@ class Assignment:
 class Timetable:
     assignments: dict[str, Assignment] = field(default_factory=dict)
     _by_slot: dict[TimeSlot, list[str]] = field(default_factory=dict)
+    version: int = 0
+    """配置が変わるたびに増える。走査結果を再利用してよいかの判断に使う。"""
 
     def place(
         self, code: str, slots: tuple[TimeSlot, ...], source: AssignmentSource
@@ -35,6 +37,7 @@ class Timetable:
         self.assignments[code] = Assignment(code, slots, source)
         for slot in slots:
             self._by_slot.setdefault(slot, []).append(code)
+        self.version += 1
 
     def remove(self, code: str) -> None:
         assignment = self.assignments.pop(code, None)
@@ -44,6 +47,7 @@ class Timetable:
             holders = self._by_slot.get(slot)
             if holders and code in holders:
                 holders.remove(code)
+        self.version += 1
 
     def occupied_by(self, slot: TimeSlot) -> list[str]:
         return list(self._by_slot.get(slot, []))

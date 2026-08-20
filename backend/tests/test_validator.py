@@ -16,8 +16,11 @@ def make(code, **kwargs):
     return Subject(code=code, **base)
 
 
-def test_all_rules_covers_h1_through_h10():
-    assert len(ALL_RULES) == 10
+def test_all_rules_covers_every_hard_constraint():
+    """規則を足したらここに現れる。番号の抜けや重複にも気づけるようにする。"""
+    assert sorted(rule.__name__ for rule in ALL_RULES) == sorted(
+        f"check_h{n}" for n in range(1, 12)
+    )
 
 
 def test_check_placement_aggregates_multiple_rule_violations():

@@ -1,7 +1,7 @@
 import pytest
 
 from app.constraints.context import Context, Violation
-from app.constraints.teacher_rules import check_h1, check_h5, check_h6, check_h7
+from app.constraints.teacher_rules import check_h1, check_h5, check_h6, check_h7, check_h11
 from app.models.enums import Category, Department, Quarter, TeacherKind, Term
 from app.models.subject import Subject
 from app.models.teacher import Teacher
@@ -212,3 +212,53 @@ def test_unknown_teacher_is_unconstrained():
     tt = Timetable()
     assert check_h5(ctx, tt, a, (TimeSlot("金", 1),)) == []
     assert check_h6(ctx, tt, a, (TimeSlot("金", 1),)) == []
+
+
+def _day_with(periods, quarter=None):
+    """教員甲の指定曜日を埋めた状態と、新たに置こうとする科目を返す。"""
+    subjects = [make_subject(f"P{p}", quarter=quarter) for p in periods]
+    subjects.append(make_subject("NEW", quarter=quarter))
+    ctx = build(subjects, [Teacher("教員甲", TeacherKind.FULL_TIME)])
+    tt = Timetable()
+    for period in periods:
+        tt.place(f"P{period}", (TimeSlot("月", period),), AssignmentSource.SOLVER)
+    return ctx.subjects["NEW"], ctx, tt
+
+
+def test_h11_allows_four_periods_in_a_day():
+    subject, ctx, tt = _day_with([1, 2, 4])
+    assert check_h11(ctx, tt, subject, (TimeSlot("月", 5),)) == []
+
+
+def test_h11_rejects_a_fifth_period_in_a_day():
+    subject, ctx, tt = _day_with([1, 2, 4, 5])
+    assert [v.rule_id for v in check_h11(ctx, tt, subject, (TimeSlot("月", 3),))] == ["H11"]
+
+
+def test_h11_counts_each_day_separately():
+    subject, ctx, tt = _day_with([1, 2, 4, 5])
+    assert check_h11(ctx, tt, subject, (TimeSlot("火", 3),)) == []
+
+
+def test_h11_is_separate_from_the_consecutive_limit():
+    """1・2 限と 4・5 限。連続は 2 コマだが合計は 4 コマになる。"""
+    subject, ctx, tt = _day_with([1, 2, 4])
+    assert check_h7(ctx, tt, subject, (TimeSlot("月", 5),)) == []
+    assert check_h11(ctx, tt, subject, (TimeSlot("月", 5),)) == []
+
+
+def test_h11_does_not_add_up_quarters_that_never_run_together():
+    """後①と後②は同じ学期でも同時に立たない。足し合わせてはいけない。"""
+    subjects = [
+        make_subject("Q1", term=Term.FALL, quarter=Quarter.Q3),
+        make_subject("Q2", term=Term.FALL, quarter=Quarter.Q3),
+        make_subject("Q3", term=Term.FALL, quarter=Quarter.Q4),
+        make_subject("Q4", term=Term.FALL, quarter=Quarter.Q4),
+        make_subject("NEW", term=Term.FALL, quarter=Quarter.Q3),
+    ]
+    ctx = build(subjects, [Teacher("教員甲", TeacherKind.FULL_TIME)])
+    tt = Timetable()
+    for code, period in (("Q1", 1), ("Q2", 2), ("Q3", 3), ("Q4", 4)):
+        tt.place(code, (TimeSlot("月", period),), AssignmentSource.SOLVER)
+    # 後①に立つのは Q1・Q2 の 2 コマだけなので 3 コマ目は置ける
+    assert check_h11(ctx, tt, ctx.subjects["NEW"], (TimeSlot("月", 5),)) == []
