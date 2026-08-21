@@ -122,13 +122,30 @@ function adoptSession(body, restored) {
   renderSummary(body.summary);
   renderWarnings(body.warnings);
   document.querySelector('#tabs button[data-view="generate"]').disabled = false;
-  if (restored) {
-    const note = document.createElement("p");
-    note.className = "hint";
-    note.textContent = `前回読み込んだデータを復元しました（セッション ${body.session_id}）。`
-      + "別の Excel を読み込めば新しいセッションになります。";
-    document.getElementById("upload-summary").prepend(note);
+  return restored ? adoptRestoredResult(body.session_id) : Promise.resolve();
+}
+
+async function adoptRestoredResult(sessionId) {
+  // 生成結果もサーバに残っている。結果タブは生成完了時にしか有効化されて
+  // いなかったため、復元しても結果に辿り着けなかった。
+  let hasResult = false;
+  try {
+    hasResult = (await api.getResult(sessionId)).status === "done";
+  } catch (error) {
+    // 結果が無いだけ。読み込み済みデータは使えるので続行する
   }
+  if (hasResult) {
+    document.querySelector('#tabs button[data-view="result"]').disabled = false;
+  }
+
+  const note = document.createElement("p");
+  note.className = "hint";
+  note.textContent = hasResult
+    ? `前回の読み込みデータと生成結果を復元しました（セッション ${sessionId}）。`
+      + "「③ 結果」から続きを編集できます。"
+    : `前回読み込んだデータを復元しました（セッション ${sessionId}）。`
+      + "別の Excel を読み込めば新しいセッションになります。";
+  document.getElementById("upload-summary").prepend(note);
 }
 
 async function restoreSession() {
@@ -140,7 +157,7 @@ async function restoreSession() {
   }
   if (!saved) return;
   try {
-    adoptSession(await api.getSession(saved), true);
+    await adoptSession(await api.getSession(saved), true);
   } catch (error) {
     // 保存期間を過ぎて消えたセッション。次回から探さない
     try {
