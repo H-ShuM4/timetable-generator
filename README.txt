@@ -1,123 +1,277 @@
+﻿===========================================================================
+  時間割自動生成システム  取扱説明書
 ===========================================================================
-  Timetable Generator
+
+事務局で管理しているカリキュラム一覧と教員一覧の Excel から、
+経営学科・会計学科・短期大学部の時間割を自動で作成するシステムです。
+
+出来上がった時間割は画面上で確認でき、気になる科目はマウスで
+別の曜日・時限へ動かせます。最後に Excel として書き出します。
+
+このシステムはこのパソコンの中だけで動きます。時間割のデータが
+外部に送られることはありません（最適化モードを使う場合を除く。
+詳しくは「2. 生成」の項をご覧ください）。
+
+
+===========================================================================
+  1. 使いはじめる前に
 ===========================================================================
 
-This system builds class timetables for the Faculty of Business
-Administration, the Faculty of Accounting, and the Junior College Division,
-from the curriculum and teacher Excel files the office already maintains.
+このパソコンに「Python（パイソン）」というソフトが入っている必要が
+あります。システムを動かすための土台になるもので、無料です。
+
+  入っているか分からない場合は、そのまま次の「2. 最初の準備」へ
+  進んでください。入っていなければ画面が教えてくれます。
+
+  入っていなかった場合の入れ方
+    (1) https://www.python.org/downloads/windows/ を開く
+    (2) 「Download Python 3.○○」と書かれたボタンから入手する
+    (3) 入れる途中で「Add python.exe to PATH」という項目に
+        必ずチェックを入れてから進む
+        ※ここにチェックを入れ忘れると動きません
+
+  情報システム担当の方がいる場合は、この作業をお願いしてください。
 
 
----------------------------------------------------------------------------
-  BEFORE YOU START
----------------------------------------------------------------------------
+===========================================================================
+  2. 最初の準備（パソコン 1 台につき 1 回だけ）
+===========================================================================
 
-Python 3.11 or newer must be installed on this computer.
+  setup.bat をダブルクリックしてください。
 
-  1. Download it from  https://www.python.org/downloads/windows/
-  2. During installation, tick "Add python.exe to PATH".
+黒い画面が開き、システムに必要な部品を自動で取り込みます。
+数百メガバイトの通信が発生するため、数分かかります。
+この作業のときだけインターネット接続が必要です。
 
-If Python is missing, setup.bat will tell you and stop.
+  終わると「Setup complete.」と表示されます。
+  何かキーを押すと画面が閉じます。
 
-
----------------------------------------------------------------------------
-  FIRST-TIME SETUP  (once per computer)
----------------------------------------------------------------------------
-
-  Double-click  setup.bat
-
-This creates a local Python environment inside this folder and installs
-everything the system needs. It downloads roughly 350 MB, so it may take
-several minutes. An internet connection is required for this step only.
-
-When it finishes it will say "Setup complete."
+この準備は最初の 1 回だけです。次回からは不要です。
 
 
----------------------------------------------------------------------------
-  DAILY USE
----------------------------------------------------------------------------
+===========================================================================
+  3. 毎日の使い方
+===========================================================================
 
-  Double-click  start.bat
+  start.bat をダブルクリックしてください。
 
-A black console window opens and your browser opens the system at
-http://localhost:8000/
+黒い画面が開き、数秒後にブラウザが自動で立ち上がります。
+自動で開かない場合は、ブラウザのアドレス欄に次を入力してください。
 
-Keep the console window open while you use the system.
-To stop the server, close the console window or press Ctrl+C in it.
+  http://localhost:8000/
 
-If port 8000 is already taken, start on another port from a command
-prompt in this folder:
+  ★ 黒い画面は閉じないでください
+    この黒い画面がシステム本体です。閉じると時間割の画面も
+    使えなくなります。作業が終わったら閉じて構いません。
 
-  start.bat 8001
+  使い終わるとき
+    黒い画面を閉じるか、黒い画面の上で Ctrl キーと C キーを
+    同時に押してください。
+
+  「port 8000 is already in use」と出たとき
+    すでにシステムが起動しています。別の黒い画面が開いていないか
+    探してください。見当たらない場合は、このフォルダーを開いて
+    アドレス欄に cmd と入力し、開いた画面で次のように打ちます。
+
+      start.bat 8001
+
+    この場合、ブラウザの住所は http://localhost:8001/ になります。
 
 
----------------------------------------------------------------------------
-  USING THE SYSTEM
----------------------------------------------------------------------------
+===========================================================================
+  4. 画面の使い方
+===========================================================================
 
-  1. FILE LOADING
-     Drag the curriculum and teacher Excel files onto the page. The system
-     reports how many subjects and teachers it read, and lists any problems
-     it found in the data. Warnings do not stop generation.
-
-  2. GENERATE
-     Choose a mode and press the generate button.
-
-       Mock          - no AI. Uses the built-in solver only.
-                       Selected automatically when no API key is set.
-       Optimization  - uses Google Gemini, then the solver for anything
-                       left over. Requires an API key (see SETTINGS).
-       Inherit       - reuses last year's timetable and only rearranges
-                       teachers whose availability or research day changed.
-                       Requires last year's files as well.
-
-     The log panel at the bottom shows each stage as it happens.
-     A full run takes about one minute.
-
-  3. RESULT
-     Review the timetable by faculty and term. Drag a class to move it.
-     A move that would break a rule is refused with the reason.
-     Press the export button to download the timetable as Excel.
-
-  4. SETTINGS
-     Store the Gemini API key, choose the model, and set how many times
-     to retry a failed request. The key is stored on this computer only
-     and is never shown again in full after saving.
-
+画面は上部の見出しで切り替えます。左から順に進めてください。
 
 ---------------------------------------------------------------------------
-  WHERE THINGS ARE STORED
+  1 ファイル読込
 ---------------------------------------------------------------------------
 
-  backend\.env                 the Gemini API key
-  backend\data\settings.json   model name and retry count
-  backend\data\sessions\       generated timetables, one file per run
-  backend\logs\                a log file per run, for troubleshooting
+  カリキュラム一覧と教員一覧の Excel を、点線の枠の中へ
+  ドラッグ＆ドロップし、「読み込む」を押します。
 
-These are created automatically the first time they are needed.
-None of them are included in this package.
+  読み込むと、科目数・教員数などの集計が表示されます。
+  数字が普段の感覚と大きく違う場合は、Excel の中身を
+  確認してください。
 
+  データに気になる点があると「警告」として一覧に出ます。
+  警告が出ても時間割は作れます。参考情報としてご覧ください。
+
+  例）担当科目がありますが出勤可能日が空欄です: ○○先生
+      → 教員一覧でその先生の出勤可能日を埋めると、より
+        適切に配置されます。
+
+  前回の続きから
+    ブラウザを閉じたり、パソコンを再起動したりしても、
+    前回読み込んだデータと作成した時間割は残っています。
+    次に開いたときに自動で復元され、画面上部に
+    「前回の読み込みデータと生成結果を復元しました。」と出ます。
+    別の Excel を読み込むと、そちらに切り替わります。
 
 ---------------------------------------------------------------------------
-  IF SOMETHING GOES WRONG
+  2 生成
 ---------------------------------------------------------------------------
 
-  "Python was not found"
-      Install Python and tick "Add python.exe to PATH", then run setup.bat.
+  作り方を選んで「生成を開始」を押します。
 
-  "a .venv folder exists but was not built for Windows"
-      This folder was copied from another computer. Delete the .venv
-      folder and run setup.bat again.
+  ● モックモード（ふだんはこちら）
+      このパソコンの中だけで時間割を組み立てます。
+      インターネットも AI も使いません。
+      10 秒ほどで終わります。
 
-  "port 8000 is already in use"
-      The system may already be running - look for another console window.
-      Otherwise start on a different port:  start.bat 8001
+  ● 最適化モード
+      Google の AI（Gemini）に配置を考えさせ、残りをこの
+      パソコンで埋めます。事前に「設定」で API キーの登録が
+      必要です。数分かかります。
+      ※ このモードでは、科目名・教員名・開講期といった情報が
+        Google のサービスへ送られます。
 
-  Generation finishes but some subjects are unplaced
-      The result screen lists them with their names and teachers. This
-      usually means a part-time teacher is assigned more classes in a term
-      than their stated availability allows. The timetable cannot solve
-      that; the teacher's available days or their assignment must change.
+  ● 踏襲モード
+      前年度の時間割をそのまま引き継ぎ、出勤可能日や研究日が
+      変わった先生の科目だけを組み替えます。
+      前年度のファイルも一緒に読み込んでおく必要があります。
 
-  Anything else
-      The log file for the run is in backend\logs\, named by date and time.
-      It records what each stage did.
+  画面の下にログ（作業の記録）が流れます。今どの段階かを
+  確認できます。終わると自動で「3 結果」へ移ります。
+
+---------------------------------------------------------------------------
+  3 結果
+---------------------------------------------------------------------------
+
+  学科と学期を選んで時間割を確認します。
+
+  科目カードの見方
+    カードの左端にある細い縦線が、その科目の情報を表します。
+
+      線の色  … 誰が置いたか
+                 黒に近い色 = Excel で曜日時限が指定済み（動かせません）
+                 濃い緑     = AI が配置
+                 薄い緑     = システムが自動で配置
+                 山吹色     = あなたが手で動かした
+                 灰色       = 前年度から引き継いだ
+
+      線の高さ… いつ開講するか
+                 上から下まで = 学期を通して開講
+                 上半分だけ   = 学期の前半だけ（前①・後①）
+                 下半分だけ   = 学期の後半だけ（前②・後②）
+
+    カード左上の数字は年次です。色が濃いほど上の学年です。
+
+  科目を動かす
+    カードをつかんで、置きたいマスへ落としてください。
+    決まりに反する場所へ落とすと、理由を示して断られます。
+    例）「松田流輝 の 水曜日が 4 コマ以上連続します」
+
+    経営学科と会計学科で合同開講の科目、および前期と後期で
+    対になっている科目は、片方を動かすともう片方も一緒に動きます。
+
+  右側の一覧
+    制約違反  … 決まりに反している箇所。赤い字で出ます。
+                 0 件が正常です。
+    未配置科目… どうしても置けなかった科目。ここからマスへ
+                 ドラッグして手で置くこともできます。
+    集中講義  … 曜日・時限を持たない科目の一覧です。
+
+  Excel として出力
+    右上のボタンを押すと、時間割表の Excel が保存されます。
+    学科×学期で 6 シート、集中講義が 1 シートです。
+
+---------------------------------------------------------------------------
+  設定
+---------------------------------------------------------------------------
+
+  最適化モードを使う場合だけ必要です。
+
+  API キー   … Google から取得したキーを貼り付けて「保存」。
+                保存後は先頭数文字しか表示されません。
+                このパソコンの中にだけ保存されます。
+  モデル     … 使う AI の種類。通常は変更不要です。
+  再試行回数 … AI の答えが決まりに反していたときに、
+                やり直す回数です。通常は 3 のままで構いません。
+
+  「開発者向け：予備モデル」は開発用の項目です。
+  実務では開かず、何も選ばないでください。
+
+
+===========================================================================
+  5. データの保存場所
+===========================================================================
+
+  backend\.env                 API キー
+  backend\data\settings.json   モデル名・再試行回数
+  backend\data\sessions\       読み込んだ Excel と作成した時間割
+                               （新しいものから 20 回分）
+  backend\logs\               作業の記録（1 回の生成につき 1 ファイル）
+
+いずれも必要になったときに自動で作られます。
+うまく動かないときは、backend\logs\ の中にある日時のついた
+ファイルを担当者にお渡しください。原因を調べる手がかりになります。
+
+
+===========================================================================
+  6. 困ったときは
+===========================================================================
+
+黒い画面に出るメッセージは英語です。よく出るものを挙げます。
+
+---------------------------------------------------------------------------
+  Python was not found
+---------------------------------------------------------------------------
+  Python が入っていません。この説明書の「1. 使いはじめる前に」に
+  従って入れてから、setup.bat をもう一度実行してください。
+  「Add python.exe to PATH」のチェックを忘れていないか確認を。
+
+---------------------------------------------------------------------------
+  Python 3.11 or newer is required
+---------------------------------------------------------------------------
+  Python は入っていますが古い版です。新しい版を入れてください。
+
+---------------------------------------------------------------------------
+  a .venv folder exists but was not built for Windows
+---------------------------------------------------------------------------
+  別のパソコンからフォルダーごとコピーした場合に出ます。
+  このフォルダーの中の「.venv」というフォルダーを削除してから、
+  setup.bat をもう一度実行してください。
+
+---------------------------------------------------------------------------
+  could not install the dependencies
+---------------------------------------------------------------------------
+  部品の取り込みに失敗しました。インターネットにつながっているか
+  確認して、setup.bat をもう一度実行してください。
+
+---------------------------------------------------------------------------
+  the Python environment is missing
+---------------------------------------------------------------------------
+  最初の準備がまだです。setup.bat を先に実行してください。
+
+---------------------------------------------------------------------------
+  port 8000 is already in use
+---------------------------------------------------------------------------
+  すでに起動しています。「3. 毎日の使い方」の項をご覧ください。
+
+---------------------------------------------------------------------------
+  生成は終わったが、未配置科目が残る
+---------------------------------------------------------------------------
+  決まりを守ったままでは置けなかった科目です。結果画面の右側に
+  科目名と担当の先生が出ます。
+
+  多くの場合、非常勤の先生の出勤可能コマ数に対して、担当科目が
+  多すぎることが原因です。時間割の組み替えでは解消できないので、
+  その先生の出勤可能日を増やしていただくか、担当科目を見直す
+  必要があります。
+
+  未配置科目の一覧からマスへドラッグすれば、手で置くこともできます。
+  その場合も決まりに反する置き方はできません。
+
+---------------------------------------------------------------------------
+  画面の表示が古いまま変わらない
+---------------------------------------------------------------------------
+  ブラウザが前回の表示を覚えていることがあります。
+  Ctrl キーを押しながら F5 キーを押して読み込み直してください。
+
+---------------------------------------------------------------------------
+  上記以外
+---------------------------------------------------------------------------
+  backend\logs\ の中の、日時のついたファイルをご確認ください。
+  どの段階で何が起きたかが記録されています。
