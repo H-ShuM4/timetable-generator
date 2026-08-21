@@ -96,12 +96,6 @@ header h1 {
   color: var(--indigo-deep);
 }
 
-.masthead .subtitle {
-  font-size: 0.75rem;
-  color: var(--ink-faint);
-  letter-spacing: 0.08em;
-}
-
 /* 番号は「読込→生成→結果」という実際の順序にだけ付ける。
    設定はその流れの外にあるので右端へ分ける。 */
 #tabs {

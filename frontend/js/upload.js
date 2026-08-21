@@ -102,8 +102,8 @@ function renderWarnings(warnings) {
   container.innerHTML = `
     <div class="panel">
       <h3>警告 <span class="count warn">${warnings.length}</span></h3>
-      <ul>${warnings.map((w) =>
-        `<li>[${escapeHtml(w.kind)}] ${escapeHtml(w.message)}</li>`).join("")}</ul>
+      <!-- w.kind は内部の識別子。利用者に見せる意味が無いのでログだけに残す -->
+      <ul>${warnings.map((w) => `<li>${escapeHtml(w.message)}</li>`).join("")}</ul>
     </div>`;
 }
 
@@ -155,13 +155,13 @@ async function adoptRestoredResult(sessionId) {
     document.querySelector('#tabs button[data-view="result"]').disabled = false;
   }
 
+  // セッション ID は利用者が使う場面が無い。復元されたことだけ伝える。
   const note = document.createElement("p");
   note.className = "hint";
   note.textContent = hasResult
-    ? `前回の読み込みデータと生成結果を復元しました（セッション ${sessionId}）。`
-      + "「③ 結果」から続きを編集できます。"
-    : `前回読み込んだデータを復元しました（セッション ${sessionId}）。`
-      + "別の Excel を読み込めば新しいセッションになります。";
+    ? "前回の読み込みデータと生成結果を復元しました。「③ 結果」から続きを編集できます。"
+    : "前回読み込んだデータを復元しました。"
+      + "別の Excel を読み込むと、そちらに切り替わります。";
   document.getElementById("upload-summary").prepend(note);
 }
 

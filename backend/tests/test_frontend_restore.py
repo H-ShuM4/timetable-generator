@@ -40,3 +40,18 @@ def test_each_breakdown_entry_stands_on_its_own(run_js):
 def test_warnings_are_amber_not_vermilion(run_js):
     """朱は制約違反だけに使う。警告は違反ではない。"""
     assert run_js("restore_session.js")["summary"]["warning_count_class"] == "count warn"
+
+
+def test_the_restore_note_does_not_show_the_session_id(run_js):
+    """セッション ID は利用者が使う場面が無い。復元された事実だけ伝える。"""
+    for key in ("with_result", "without_result"):
+        note = run_js("restore_session.js")[key]["note"]
+        assert "セッション" not in note
+        assert "復元しました" in note
+
+
+def test_a_warning_shows_its_message_without_the_internal_kind(run_js):
+    """[missing_availability] のような識別子は内部用。ログには残る。"""
+    text = run_js("restore_session.js")["summary"]["warning_text"]
+    assert text == "出勤可能日が空欄です"
+    assert "[" not in text

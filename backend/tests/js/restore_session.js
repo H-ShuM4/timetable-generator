@@ -98,6 +98,8 @@ function summaryMarkup() {
       .match(/class="tally">([^<]*)</g) || []).map((m) => m.match(/>([^<]*)</)[1].trim()),
     warning_count_class: (document.nodes["upload-warnings"].innerHTML
       .match(/class="(count [a-z]+)"/) || [])[1] || null,
+    warning_text: (document.nodes["upload-warnings"].innerHTML
+      .match(/<li>([^<]*)</) || [])[1] || null,
   };
 }
 
