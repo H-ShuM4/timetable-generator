@@ -32,12 +32,12 @@ function renderTabs() {
   const departments = ["経営", "会計", "短期大学部"];
   const terms = ["前期", "後期"];
   document.getElementById("result-tabs").innerHTML = `
-    <div>
+    <div class="group">
       ${departments.map((d) => `
         <button class="dept-tab${d === currentDepartment ? " active" : ""}"
                 data-dept="${d}">${d}</button>`).join("")}
     </div>
-    <div>
+    <div class="group">
       ${terms.map((t) => `
         <button class="term-tab${t === currentTerm ? " active" : ""}"
                 data-term="${t}">${t}</button>`).join("")}
@@ -57,19 +57,29 @@ function renderTabs() {
   });
 }
 
+// 前①・後① は学期の前半、前②・後② は後半に開講する。カード左端の
+// レールをその半分だけ塗ることで、文字で [後①] と書かなくても
+// 「学期のどこで開くか」が形で分かる。
+const QUARTER_HALVES = { "前①": "first", "後①": "first", "前②": "second", "後②": "second" };
+
 function cardHtml(placement, grabbedLabel, isViolating) {
-  const quarter = placement.quarter ? `[${escapeHtml(placement.quarter)}]` : "";
   const source = escapeHtml(placement.source);
-  const sourceLabel = escapeHtml(SOURCE_LABELS[placement.source] || placement.source);
+  const half = QUARTER_HALVES[placement.quarter];
+  const sourceLabel = SOURCE_LABELS[placement.source] || placement.source;
+  // レールは形だけなので、同じ内容を title に言葉で持たせる
+  const title = escapeHtml(
+    placement.quarter ? `${sourceLabel}・${placement.quarter}` : sourceLabel
+  );
   return `
-    <div class="card source-${source}${isViolating ? " violating" : ""}"
+    <div class="card source-${source}${half ? ` quarter-${half}` : ""}${isViolating ? " violating" : ""}"
          draggable="true"
          data-code="${escapeHtml(placement.code)}"
          data-grabbed="${escapeHtml(grabbedLabel)}"
-         title="${sourceLabel}">
-      <strong>${escapeHtml(placement.name)}${quarter}</strong><br>
-      ${escapeHtml(placement.teacher)}<br>
-      ${escapeHtml(String(placement.year))}年・${escapeHtml(placement.category)}
+         title="${title}">
+      <span class="card-rail" aria-hidden="true"></span>
+      <span class="card-year y${escapeHtml(String(placement.year))}">${escapeHtml(String(placement.year))}年</span>
+      <span class="card-name">${escapeHtml(placement.name)}</span>
+      <span class="card-meta">${escapeHtml(placement.teacher)}・${escapeHtml(placement.category)}</span>
     </div>`;
 }
 
@@ -96,7 +106,9 @@ function renderGrid() {
         .join("");
       return `<td data-slot="${label}">${cards}</td>`;
     }).join("");
-    return `<tr><th>${period}限</th>${cells}</tr>`;
+    return `<tr>
+      <th><span class="period-number">${period}</span><span class="period-unit">限</span></th>
+      ${cells}</tr>`;
   }).join("");
 
   document.getElementById("timetable-grid").innerHTML = `
@@ -115,6 +127,12 @@ function describeSubjectRef(subject) {
     + `${escapeHtml(subject.category)}）`;
 }
 
+function setCount(id, value, alert) {
+  const element = document.getElementById(id);
+  element.textContent = String(value);
+  element.classList.toggle("alert", Boolean(alert) && value > 0);
+}
+
 function renderSide() {
   // 未配置科目もドラッグで置けるようにする。置く手段が画面に無いと、
   // 制約の都合で自動配置できなかった科目に事務局が手出しできない。
@@ -127,8 +145,12 @@ function renderSide() {
     resultData.intensive.map((s) => `<li>${describeSubjectRef(s)}</li>`).join("") || "<li>なし</li>";
   document.getElementById("violation-list").innerHTML =
     resultData.violations
-      .map((v) => `<li class="log-ERROR">[${escapeHtml(v.rule_id)}] ${escapeHtml(v.message)}</li>`)
+      .map((v) => `<li>[${escapeHtml(v.rule_id)}] ${escapeHtml(v.message)}</li>`)
       .join("") || "<li>違反はありません</li>";
+
+  setCount("count-unplaced", resultData.unplaced.length);
+  setCount("count-intensive", resultData.intensive.length);
+  setCount("count-violations", resultData.violations.length, true);
 }
 
 function attachDragHandlers() {

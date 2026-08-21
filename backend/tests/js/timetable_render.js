@@ -52,6 +52,16 @@ const withViolation = {
   violations: [{ rule_id: "H2", subject_code: "V1", message: "重複", related_code: "V2" }],
 };
 
+// 期間レールの検証用。開講期間が違う 3 枚を同じコマに置く。
+const quarters = {
+  placements: [
+    placement("Q0", "通し科目", 2, ["月1"], { quarter: null, source: "gemini" }),
+    placement("Q1", "前半科目", 3, ["月1"], { quarter: "後①", source: "prelock" }),
+    placement("Q2", "後半科目", 4, ["月1"], { quarter: "前②", source: "manual" }),
+  ],
+  unplaced: [], intensive: [], violations: [],
+};
+
 const doubleSlot = {
   placements: [placement("D1", "▲科目", 1, ["水2", "水3"])],
   unplaced: [
@@ -73,6 +83,16 @@ function run() {
 
   sandbox = load(withViolation);
   out.violating_codes = Array.from(sandbox.violatingCodes()).sort();
+  sandbox.renderGrid();
+  out.violating_html = sandbox.document.nodes["timetable-grid"].innerHTML;
+
+  sandbox = load(quarters);
+  sandbox.renderGrid();
+  const grid = sandbox.document.nodes["timetable-grid"].innerHTML;
+  out.card_classes = (grid.match(/class="card [^"]*"/g) || []);
+  out.card_titles = attributeValues(grid, "title");
+  out.year_chips = (grid.match(/class="card-year y\d"/g) || []);
+  out.rail_count = (grid.match(/class="card-rail"/g) || []).length;
 
   sandbox = load(doubleSlot);
   // 水3 のカードを掴んで木4 へ落とす（1 日ぶん右、1 コマぶん下）
@@ -94,7 +114,8 @@ function run() {
   const dangerous = sandbox.document.nodes["timetable-grid"].innerHTML;
   out.escaped_has_raw_tag = dangerous.includes("<script>");
   out.escaped_has_raw_quote = /data-code="[^"]*"[^>]*"x"/.test(dangerous);
-  out.escaped_sample = dangerous.slice(dangerous.indexOf("<strong>"), dangerous.indexOf("<strong>") + 60);
+  const nameAt = dangerous.indexOf('class="card-name"');
+  out.escaped_sample = dangerous.slice(nameAt, nameAt + 80);
 
   return out;
 }

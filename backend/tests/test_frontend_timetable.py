@@ -50,3 +50,36 @@ def test_subject_names_cannot_break_out_of_the_markup(run_js):
     assert out["escaped_has_raw_tag"] is False
     assert out["escaped_has_raw_quote"] is False
     assert "&lt;script&gt;&quot;x&quot;" in out["escaped_sample"]
+
+
+def test_the_rail_shows_which_half_of_the_term_a_class_runs(run_js):
+    """前①・後① は学期の前半、前②・後② は後半。開講期間の指定が無ければ
+    レールは全高になる。文字で [後①] と書く代わりに形で示す。"""
+    assert run_js("timetable_render.js")["card_classes"] == [
+        'class="card source-gemini"',
+        'class="card source-prelock quarter-first"',
+        'class="card source-manual quarter-second"',
+    ]
+
+
+def test_every_card_carries_a_rail(run_js):
+    assert run_js("timetable_render.js")["rail_count"] == 3
+
+
+def test_the_rail_is_described_in_words_for_anyone_who_cannot_see_it(run_js):
+    """レールは形だけなので、同じ内容を title に持たせる。"""
+    assert run_js("timetable_render.js")["card_titles"] == [
+        "AI 配置", "事前ロック・後①", "手動編集・前②",
+    ]
+
+
+def test_the_year_chip_uses_one_step_per_year(run_js):
+    """年次は順序のあるデータなので、色相ではなく藍の濃淡 4 段で表す。"""
+    assert run_js("timetable_render.js")["year_chips"] == [
+        'class="card-year y2"', 'class="card-year y3"', 'class="card-year y4"',
+    ]
+
+
+def test_a_violating_card_is_marked(run_js):
+    """違反は朱。事務で訂正を書き入れる色をその意味だけに使う。"""
+    assert "violating" in run_js("timetable_render.js")["violating_html"]

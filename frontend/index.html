@@ -8,31 +8,40 @@
 </head>
 <body>
   <header>
-    <h1>時間割自動生成システム</h1>
+    <div class="masthead">
+      <h1>時間割自動生成システム</h1>
+      <span class="subtitle">経営学科・会計学科・短期大学部</span>
+    </div>
+    <!-- 番号は「読込→生成→結果」という実際の順序にだけ付ける。
+         設定はその流れの外にあるので右端へ分ける。 -->
     <nav id="tabs">
-      <button data-view="upload" class="active">① ファイル読込</button>
-      <button data-view="generate" disabled>② 生成</button>
-      <button data-view="result" disabled>③ 結果</button>
-      <button data-view="settings">④ 設定</button>
+      <button data-view="upload" class="active"><span class="step">1</span>ファイル読込</button>
+      <button data-view="generate" disabled><span class="step">2</span>生成</button>
+      <button data-view="result" disabled><span class="step">3</span>結果</button>
+      <span class="spacer"></span>
+      <button data-view="settings">設定</button>
     </nav>
   </header>
 
   <main>
     <section id="view-upload" class="view active">
       <h2>Excel ファイルの読み込み</h2>
+      <div class="panel">
       <div id="dropzone">
         <p>カリキュラム一覧・教員一覧の Excel をここにドラッグ&amp;ドロップ</p>
         <p class="hint">踏襲モードを使う場合は前年度のファイルも一緒に投入してください</p>
         <input type="file" id="file-input" multiple accept=".xlsx">
       </div>
       <div id="file-assign"></div>
-      <button id="upload-button" disabled>読み込む</button>
+      <button id="upload-button" class="primary" disabled>読み込む</button>
+      </div>
       <div id="upload-summary"></div>
       <div id="upload-warnings"></div>
     </section>
 
     <section id="view-generate" class="view">
       <h2>時間割の生成</h2>
+      <div class="panel">
       <div id="mode-select">
         <label><input type="radio" name="mode" value="mock" checked> モックモード</label>
         <label><input type="radio" name="mode" value="optimize"> 最適化モード</label>
@@ -42,27 +51,38 @@
         <h3>組み替え対象</h3>
         <div id="retarget-list"></div>
       </div>
-      <button id="generate-button">生成を開始</button>
+      <button id="generate-button" class="primary">生成を開始</button>
+      </div>
       <div id="generate-status"></div>
     </section>
 
     <section id="view-result" class="view">
       <h2>生成結果</h2>
       <div id="result-tabs"></div>
-      <div id="timetable-grid"></div>
-      <aside id="result-side">
-        <h3>未配置科目</h3>
-        <ul id="unplaced-list"></ul>
-        <h3>集中講義</h3>
-        <ul id="intensive-list"></ul>
-        <h3>制約違反</h3>
-        <ul id="violation-list"></ul>
-      </aside>
-      <button id="export-button">Excel として出力</button>
+      <div class="result-layout">
+        <div class="grid-wrap"><div id="timetable-grid"></div></div>
+        <aside id="result-side">
+          <details class="side-block" id="block-violations" open>
+            <summary>制約違反 <span class="count" id="count-violations">0</span></summary>
+            <ul id="violation-list"></ul>
+          </details>
+          <details class="side-block" id="block-unplaced" open>
+            <summary>未配置科目 <span class="count" id="count-unplaced">0</span></summary>
+            <p class="hint">グリッドへドラッグすると手で配置できます。</p>
+            <ul id="unplaced-list"></ul>
+          </details>
+          <details class="side-block" id="block-intensive">
+            <summary>集中講義 <span class="count" id="count-intensive">0</span></summary>
+            <ul id="intensive-list"></ul>
+          </details>
+          <button id="export-button" class="primary">Excel として出力</button>
+        </aside>
+      </div>
     </section>
 
     <section id="view-settings" class="view">
       <h2>Gemini の設定</h2>
+      <div class="panel">
       <div class="field">
         <label for="api-key">API キー</label>
         <input type="password" id="api-key" placeholder="AIza...">
@@ -105,7 +125,8 @@
           <input id="fallback-extra" placeholder="カンマ区切りで追加">
         </div>
       </details>
-      <button id="save-settings">設定を保存</button>
+      <button id="save-settings" class="primary">設定を保存</button>
+      </div>
       <div id="settings-status"></div>
     </section>
   </main>
