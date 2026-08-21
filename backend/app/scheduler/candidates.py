@@ -39,10 +39,19 @@ def candidate_slot_sets(subject: Subject) -> list[tuple[TimeSlot, ...]]:
 
 
 def feasible_slot_sets(
-    context: Context, timetable: Timetable, subject: Subject
+    context: Context,
+    timetable: Timetable,
+    subject: Subject,
+    structural: list[tuple[TimeSlot, ...]] | None = None,
 ) -> list[tuple[TimeSlot, ...]]:
-    """現在の配置状況で実際に置ける候補だけを返す。"""
+    """現在の配置状況で実際に置ける候補だけを返す。
+
+    structural には candidate_slot_sets の結果を渡せる。同じ科目を何度も
+    評価する探索では、構造だけで決まる候補を作り直す意味がない。
+    """
+    if structural is None:
+        structural = candidate_slot_sets(subject)
     return [
-        slots for slots in candidate_slot_sets(subject)
+        slots for slots in structural
         if is_allowed(context, timetable, subject, slots)
     ]
