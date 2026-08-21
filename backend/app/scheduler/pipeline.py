@@ -9,8 +9,7 @@ from typing import Protocol
 
 from app.constraints.context import Context, Violation
 from app.constraints.validator import validate_all
-from app.ingest.joint_pairing import assign_joint_ids
-from app.ingest.pair_linking import assign_pair_ids
+from app.ingest.pair_linking import link_subjects
 from app.ingest.validators import Warning, collect_warnings
 from app.logging.session_logger import SessionLogger
 from app.models.enums import Category
@@ -65,8 +64,7 @@ def run_pipeline(
 ) -> GenerationResult:
     logger.info(f"生成を開始します（モード: {mode.value}）", stage="Stage 0")
 
-    joint_mismatches = assign_joint_ids(subjects)
-    assign_pair_ids(subjects)
+    joint_mismatches = link_subjects(subjects)
     context = Context.from_lists(subjects, teachers)
     warnings = collect_warnings(subjects, context.teachers, joint_mismatches)
     for warning in warnings:

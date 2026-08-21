@@ -7,11 +7,11 @@ from app.models.timetable import AssignmentSource, Timetable
 
 
 def make(code, category, year=1, department=Department.MANAGEMENT, base_name=None,
-         courses=None, is_seminar=False, term=Term.SPRING, quarter=None, teacher="教員甲"):
+         courses=None, term=Term.SPRING, quarter=None, teacher="教員甲"):
     return Subject(
         code=code, name=code, base_name=base_name or code, department=department,
         year=year, term=term, quarter=quarter, category=category,
-        courses=courses or [], teacher=teacher, is_seminar=is_seminar,
+        courses=courses or [], teacher=teacher,
     )
 
 
@@ -45,14 +45,14 @@ def test_h2_allows_different_department():
     assert check_h2(ctx, tt, b, (TimeSlot("月", 1),)) == []
 
 
-def test_h2_allows_same_seminar_with_different_teachers():
-    a = make("A1", Category.REQUIRED, base_name="日本語リテラシーⅠ", is_seminar=True)
-    b = make("B1", Category.REQUIRED, base_name="日本語リテラシーⅠ", is_seminar=True)
+def test_h2_allows_the_same_subject_taught_by_different_teachers():
+    a = make("A1", Category.REQUIRED, base_name="日本語リテラシーⅠ")
+    b = make("B1", Category.REQUIRED, base_name="日本語リテラシーⅠ")
     ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
     assert check_h2(ctx, tt, b, (TimeSlot("月", 1),)) == []
 
 
-def test_h2_allows_same_non_seminar_course_with_different_teachers():
+def test_h2_allows_the_same_ordinary_subject_in_two_sections():
     # 英語Ⅰ・情報リテラシーⅠ・商業簿記Ⅰ のような複数クラス開講の通常科目
     a = make("A1", Category.REQUIRED, base_name="商業簿記Ⅰ", teacher="教員甲")
     b = make("B1", Category.REQUIRED, base_name="商業簿記Ⅰ", teacher="教員乙")
@@ -62,15 +62,15 @@ def test_h2_allows_same_non_seminar_course_with_different_teachers():
 
 def test_h2_allows_retake_section_to_share_with_the_original():
     # base_name は【再】を除いた名前なので同一科目とみなされる
-    a = make("A1", Category.REQUIRED, base_name="日本語リテラシーⅠ", is_seminar=True)
-    b = make("B1", Category.REQUIRED, base_name="日本語リテラシーⅠ", is_seminar=False)
+    a = make("A1", Category.REQUIRED, base_name="日本語リテラシーⅠ")
+    b = make("B1", Category.REQUIRED, base_name="日本語リテラシーⅠ")
     ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
     assert check_h2(ctx, tt, b, (TimeSlot("月", 1),)) == []
 
 
-def test_h2_flags_two_different_seminars():
-    a = make("A1", Category.REQUIRED, base_name="日本語リテラシーⅠ", is_seminar=True)
-    b = make("B1", Category.REQUIRED, base_name="プレゼミナール", is_seminar=True)
+def test_h2_flags_two_different_subjects():
+    a = make("A1", Category.REQUIRED, base_name="日本語リテラシーⅠ")
+    b = make("B1", Category.REQUIRED, base_name="プレゼミナール")
     ctx, tt = place([a, b], "A1", TimeSlot("月", 1))
     assert [v.rule_id for v in check_h2(ctx, tt, b, (TimeSlot("月", 1),))] == ["H2"]
 

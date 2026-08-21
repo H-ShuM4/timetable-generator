@@ -61,16 +61,3 @@ class Subject:
     requires_consecutive: bool = False
     fixed_slot: tuple[TimeSlot, ...] | None = None
     is_intensive: bool = False
-    is_seminar: bool = False
-    """ゼミ科目群（`config/seminar_subjects.json`）に属するか。
-
-    **制約判定では使われていない。** H2 の除外条件が「双方がゼミ科目で
-    base_name が同一」から「base_name が同一」へ一般化された際に不要に
-    なった。事務局の運用では担当教員違いの同一科目はゼミかどうかに
-    関係なく同一コマへ集約するため、ゼミという区分をスケジューリングで
-    区別する必要がない。
-
-    どの科目がゼミなのかという定義自体は本学のカリキュラム記述として
-    意味があるため保持している。将来これを参照する機能が現れなければ、
-    このフィールドと設定ファイルは削除してよい。
-    """

@@ -17,6 +17,7 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
+from app.ingest.joint_pairing import assign_joint_ids
 from app.models.subject import Subject
 
 _CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "paired_subjects.json"
@@ -82,3 +83,18 @@ def assign_pair_ids(subjects: list[Subject], config_path: Path | None = None) ->
     index = 1
     for family in config["adjacent_periods"]:
         index = _link_family(subjects, list(family), "N", index, "adjacent_id")
+
+
+def link_subjects(subjects: list[Subject]) -> list[str]:
+    """科目同士の結び付きをすべて与える。合同フラグ付け忘れの科目コードを返す。
+
+    合同（同一学期の経営・会計）と前後期の対応は別の関係だが、**どちらも
+    必ず与えること**。片方だけだと H4 か H12 が判定できず、しかも黙って
+    通ってしまう。実際 `assign_pair_ids` を足したとき、呼び出し箇所を
+    1 つ取りこぼして本番と違う条件でテストが走った。
+
+    呼ぶ側がこの関数だけを覚えていればよいようにしてある。
+    """
+    mismatches = assign_joint_ids(subjects)
+    assign_pair_ids(subjects)
+    return mismatches

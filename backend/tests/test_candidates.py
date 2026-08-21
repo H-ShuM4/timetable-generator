@@ -1,18 +1,10 @@
 from app.constraints.context import Context
-from app.models.enums import Category, Department, Term
-from app.models.subject import Subject
+from tests.factories import subject as make
 from app.models.timeslot import TimeSlot
 from app.models.timetable import AssignmentSource, Timetable
 from app.scheduler.candidates import candidate_slot_sets, feasible_slot_sets
 
 
-def make(code, **kwargs):
-    base = dict(
-        name=code, base_name=code, department=Department.MANAGEMENT, year=1,
-        term=Term.SPRING, quarter=None, category=Category.REQUIRED, teacher="教員甲",
-    )
-    base.update(kwargs)
-    return Subject(code=code, **base)
 
 
 def test_single_slot_subject_has_25_candidates():

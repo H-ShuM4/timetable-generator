@@ -2,20 +2,13 @@ import openpyxl
 
 from app.constraints.context import Context
 from app.export.excel_writer import SHEET_PLAN, write_timetable_excel
-from app.models.enums import Category, Department, Quarter, Term
-from app.models.subject import Subject
+from app.models.enums import Department, Quarter, Term
+from tests.factories import subject as make
 from app.models.timeslot import TimeSlot
 from app.models.timetable import AssignmentSource, Timetable
 from app.scheduler.pipeline import GenerationResult
 
 
-def make(code, **kwargs):
-    base = dict(
-        name=code, base_name=code, department=Department.MANAGEMENT, year=1,
-        term=Term.SPRING, quarter=None, category=Category.REQUIRED, teacher="教員甲",
-    )
-    base.update(kwargs)
-    return Subject(code=code, **base)
 
 
 def build(subjects, placements, intensive_codes=()):

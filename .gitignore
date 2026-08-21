@@ -6,3 +6,11 @@ backend/data/sessions/
 backend/logs/
 .pytest_cache/
 timetable-generator.zip
+
+# 事務局から受け取った実データ。教員の実名を含むため追跡しない。
+# 開発時はこのフォルダーに置いて使う。
+/カリキュラム一覧*.xlsx
+/教員一覧*.xlsx
+
+# 開発環境のローカル設定
+.claude/

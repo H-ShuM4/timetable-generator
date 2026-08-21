@@ -7,14 +7,8 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.api.schemas import SessionRef, UploadResponse, UploadSummary, WarningOut
-from app.ingest.curriculum_reader import read_curriculum_rows
-from app.ingest.joint_pairing import assign_joint_ids
-from app.ingest.pair_linking import assign_pair_ids
-from app.ingest.markitdown_fallback import read_curriculum_with_fallback
-from app.ingest.teacher_reader import read_teachers
-from app.ingest.validators import check_partial_slots, collect_warnings
+from app.ingest.session_builder import load_session_data
 from app.logging.session_logger import SessionLogger
-from app.scheduler.inherit import read_previous_timetable
 from app.session_store import SessionData, store
 
 router = APIRouter(prefix="/api", tags=["upload"])
@@ -62,60 +56,36 @@ async def upload(
     logger = SessionLogger("upload")
     # 復元用にどのファイルを読んだかを控える。セッションは再起動や
     # ブラウザの再読み込みで消えるため、Excel を保存して読み直せるようにする。
-    saved: dict[str, tuple] = {}
+    uploads = {
+        "curriculum": curriculum,
+        "teachers": teachers,
+        "previous_curriculum": previous_curriculum,
+        "previous_teachers": previous_teachers,
+    }
     try:
-        curriculum_path = _read_or_400(
-            FILE_LABELS["curriculum"], lambda: _persist(curriculum)
+        saved = {
+            role: (_read_or_400(FILE_LABELS[role], lambda u=upload: _persist(u)),
+                   upload.filename or "")
+            for role, upload in uploads.items()
+            if upload is not None
+        }
+        loaded = load_session_data(
+            saved["curriculum"][0],
+            saved["teachers"][0],
+            logger,
+            previous_curriculum=saved.get("previous_curriculum", (None,))[0],
+            previous_teachers=saved.get("previous_teachers", (None,))[0],
+            read=lambda role, action: _read_or_400(FILE_LABELS[role], action),
         )
-        saved["curriculum"] = (curriculum_path, curriculum.filename or "")
-        subjects = _read_or_400(
-            FILE_LABELS["curriculum"],
-            lambda: read_curriculum_with_fallback(curriculum_path, logger),
-        )
-        partial_slot_warnings = _read_or_400(
-            FILE_LABELS["curriculum"],
-            lambda: check_partial_slots(read_curriculum_rows(curriculum_path)),
-        )
-        teachers_path = _read_or_400(
-            FILE_LABELS["teachers"], lambda: _persist(teachers)
-        )
-        saved["teachers"] = (teachers_path, teachers.filename or "")
-        teacher_map = _read_or_400(
-            FILE_LABELS["teachers"], lambda: read_teachers(teachers_path)
-        )
-        previous_entries = {}
-        if previous_curriculum is not None:
-            previous_path = _read_or_400(
-                FILE_LABELS["previous_curriculum"], lambda: _persist(previous_curriculum)
-            )
-            saved["previous_curriculum"] = (previous_path, previous_curriculum.filename or "")
-            previous_entries = _read_or_400(
-                FILE_LABELS["previous_curriculum"],
-                lambda: read_previous_timetable(previous_path),
-            )
-        previous_teacher_map = {}
-        if previous_teachers is not None:
-            previous_teachers_path = _read_or_400(
-                FILE_LABELS["previous_teachers"], lambda: _persist(previous_teachers)
-            )
-            saved["previous_teachers"] = (previous_teachers_path, previous_teachers.filename or "")
-            previous_teacher_map = _read_or_400(
-                FILE_LABELS["previous_teachers"],
-                lambda: read_teachers(previous_teachers_path),
-            )
     finally:
         logger.close()
 
-    joint_mismatches = assign_joint_ids(subjects)
-    assign_pair_ids(subjects)
-    warnings = collect_warnings(subjects, teacher_map, joint_mismatches) + partial_slot_warnings
-
     data = SessionData(
-        subjects=subjects,
-        teachers=teacher_map,
-        warnings=warnings,
-        previous_entries=previous_entries,
-        previous_teachers=previous_teacher_map,
+        subjects=loaded.subjects,
+        teachers=loaded.teachers,
+        warnings=loaded.warnings,
+        previous_entries=loaded.previous_entries,
+        previous_teachers=loaded.previous_teachers,
     )
     session_id = store.create(data, saved)
 

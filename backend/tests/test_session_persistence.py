@@ -23,17 +23,23 @@ def store(tmp_path):
 
 
 @pytest.fixture
-def uploaded(store):
-    """アップロード直後と同じ状態を作る。"""
-    from app.ingest.curriculum_reader import read_curriculum
-    from app.ingest.joint_pairing import assign_joint_ids
-    from app.ingest.pair_linking import assign_pair_ids
-    from app.ingest.teacher_reader import read_teachers
+def uploaded(store, tmp_path):
+    """アップロード直後と同じ状態を作る。
 
-    subjects = read_curriculum(CURRICULUM)
-    assign_joint_ids(subjects)
-    assign_pair_ids(subjects)
-    data = SessionData(subjects=subjects, teachers=read_teachers(TEACHERS))
+    読み込み手順をここで並べ直さない。本番と同じ load_session_data を
+    通すことで、前処理を足したときに取りこぼさない。
+    """
+    from app.ingest.session_builder import load_session_data
+    from app.logging.session_logger import SessionLogger
+
+    logger = SessionLogger("fixture", log_dir=tmp_path)
+    loaded = load_session_data(CURRICULUM, TEACHERS, logger)
+    logger.close()
+    data = SessionData(
+        subjects=loaded.subjects,
+        teachers=loaded.teachers,
+        warnings=loaded.warnings,
+    )
     session_id = store.create(data, {
         "curriculum": (CURRICULUM, "カリキュラム一覧.xlsx"),
         "teachers": (TEACHERS, "教員一覧.xlsx"),
@@ -137,3 +143,22 @@ def test_a_running_session_is_not_deleted_by_pruning(store, monkeypatch):
                  {"curriculum": (CURRICULUM, "c.xlsx"), "teachers": (TEACHERS, "t.xlsx")})
 
     assert busy_id in {row["session_id"] for row in store.list_sessions()}
+
+
+def test_upload_and_restore_read_the_workbooks_the_same_way(store, uploaded):
+    """アップロード直後と復元後で、科目の結び付きが一致すること。
+
+    読み込み経路が 2 つあると、前処理を片方だけに足す事故が起きる。
+    """
+    session_id, original = uploaded
+    store._sessions.clear()
+    restored = store.get(session_id)
+
+    def fingerprint(data):
+        return sorted(
+            (s.code, s.joint_id, s.pair_id, s.adjacent_id, s.is_remote_prohibited)
+            for s in data.subjects
+        )
+
+    assert fingerprint(restored) == fingerprint(original)
+    assert [w.message for w in restored.warnings] == [w.message for w in original.warnings]

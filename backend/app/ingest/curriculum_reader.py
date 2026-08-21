@@ -128,9 +128,6 @@ def read_curriculum_rows(path: str | Path) -> list[dict]:
 
 def read_curriculum(path: str | Path) -> list[Subject]:
     """全シートを読み、Subject のリストを返す。"""
-    # is_seminar は制約判定では使われない。理由は Subject.is_seminar の
-    # docstring を参照。カリキュラム記述として保持しているだけである。
-    seminar_names = set(_load_json("seminar_subjects.json", []))
     overrides = _load_json("subject_overrides.json", {})
     non_consecutive = set(overrides.get("non_consecutive_double_subjects", []))
 
@@ -196,7 +193,6 @@ def read_curriculum(path: str | Path) -> list[Subject]:
                 requires_consecutive=requires_consecutive,
                 fixed_slot=tuple(slots) if len(slots) == slots_required else None,
                 is_intensive=intensive,
-                is_seminar=base_name in seminar_names,
             )
         )
 

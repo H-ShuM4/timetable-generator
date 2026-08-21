@@ -1,20 +1,13 @@
 from app.constraints.context import Context
 from app.constraints.validator import validate_all
-from app.models.enums import Category, Department, TeacherKind, Term
-from app.models.subject import Subject
+from app.models.enums import TeacherKind
 from app.models.teacher import Teacher
+from tests.factories import subject_with_own_teacher as make
 from app.models.timeslot import TimeSlot
 from app.models.timetable import AssignmentSource, Timetable
 from app.scheduler.solver import solve
 
 
-def make(code, **kwargs):
-    base = dict(
-        name=code, base_name=code, department=Department.MANAGEMENT, year=1,
-        term=Term.SPRING, quarter=None, category=Category.REQUIRED, teacher=f"教員{code}",
-    )
-    base.update(kwargs)
-    return Subject(code=code, **base)
 
 
 def test_places_a_single_subject():

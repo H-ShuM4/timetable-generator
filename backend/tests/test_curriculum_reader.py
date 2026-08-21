@@ -46,7 +46,6 @@ def test_pre_seminar_is_the_non_consecutive_exception():
     pre_seminar = _by_code(read_curriculum(CURRICULUM_XLSX))["J10405"]
     assert pre_seminar.slots_required == 2
     assert pre_seminar.requires_consecutive is False
-    assert pre_seminar.is_seminar is True
     # 事務局が曜日・時限を空にしたため確定枠は無く、システムが配置する
     assert pre_seminar.fixed_slot is None
 
@@ -62,7 +61,6 @@ def test_retake_subject_shares_base_name_with_original():
     subjects = _by_code(read_curriculum(CURRICULUM_XLSX))
     assert subjects["A50201"].base_name == "日本語リテラシーⅠ"
     assert subjects["A50206"].base_name == "日本語リテラシーⅠ"
-    assert subjects["A50206"].is_seminar is True
 
 
 def test_university_courses_are_read_including_multi_course_subjects():

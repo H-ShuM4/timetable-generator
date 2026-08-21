@@ -4,19 +4,12 @@ from app.constraints.context import Context
 from app.gemini.client import GeminiError
 from app.logging.session_logger import SessionLogger
 from app.models.enums import Category, Department, Term
-from app.models.subject import Subject
+from tests.factories import subject_with_own_teacher as make
 from app.models.timeslot import TimeSlot
 from app.models.timetable import AssignmentSource, Timetable
 from app.scheduler.gemini_stage import chunk_codes, make_gemini_placer
 
 
-def make(code, **kwargs):
-    base = dict(
-        name=code, base_name=code, department=Department.MANAGEMENT, year=1,
-        term=Term.SPRING, quarter=None, category=Category.REQUIRED, teacher=f"教員{code}",
-    )
-    base.update(kwargs)
-    return Subject(code=code, **base)
 
 
 class ScriptedClient:

@@ -19,17 +19,14 @@ from pathlib import Path
 
 from app.constraints.context import Context
 from app.constraints.validator import validate_all
-from app.ingest.joint_pairing import assign_joint_ids
-from app.ingest.markitdown_fallback import read_curriculum_with_fallback
-from app.ingest.pair_linking import assign_pair_ids
-from app.ingest.teacher_reader import read_teachers
-from app.ingest.validators import Warning, check_partial_slots, collect_warnings
+from app.ingest.session_builder import load_session_data
+from app.ingest.validators import Warning
 from app.logging.session_logger import SessionLogger
 from app.models.subject import Subject
 from app.models.teacher import Teacher
 from app.models.timeslot import TimeSlot
 from app.models.timetable import AssignmentSource, Timetable
-from app.scheduler.inherit import PreviousEntry, read_previous_timetable
+from app.scheduler.inherit import PreviousEntry
 from app.scheduler.pipeline import GenerationResult
 
 SESSIONS_DIR = Path(__file__).resolve().parents[1] / "data" / "sessions"
@@ -144,28 +141,26 @@ class SessionStore:
         return data
 
     def _read_session_files(self, directory: Path, logger: SessionLogger) -> SessionData:
-        from app.ingest.curriculum_reader import read_curriculum_rows
-
+        """保存した Excel を、アップロード時とまったく同じ手順で読み直す。"""
         files = directory / "files"
-        subjects = read_curriculum_with_fallback(files / "curriculum.xlsx", logger)
-        partial = check_partial_slots(read_curriculum_rows(files / "curriculum.xlsx"))
-        teachers = read_teachers(files / "teachers.xlsx")
 
-        previous_entries = {}
-        if (files / "previous_curriculum.xlsx").exists():
-            previous_entries = read_previous_timetable(files / "previous_curriculum.xlsx")
-        previous_teachers = {}
-        if (files / "previous_teachers.xlsx").exists():
-            previous_teachers = read_teachers(files / "previous_teachers.xlsx")
+        def optional(name: str) -> Path | None:
+            path = files / f"{name}.xlsx"
+            return path if path.exists() else None
 
-        mismatches = assign_joint_ids(subjects)
-        assign_pair_ids(subjects)
+        loaded = load_session_data(
+            files / "curriculum.xlsx",
+            files / "teachers.xlsx",
+            logger,
+            previous_curriculum=optional("previous_curriculum"),
+            previous_teachers=optional("previous_teachers"),
+        )
         return SessionData(
-            subjects=subjects,
-            teachers=teachers,
-            warnings=collect_warnings(subjects, teachers, mismatches) + partial,
-            previous_entries=previous_entries,
-            previous_teachers=previous_teachers,
+            subjects=loaded.subjects,
+            teachers=loaded.teachers,
+            warnings=loaded.warnings,
+            previous_entries=loaded.previous_entries,
+            previous_teachers=loaded.previous_teachers,
         )
 
     def _apply_saved_result(self, directory: Path, data: SessionData) -> None:
