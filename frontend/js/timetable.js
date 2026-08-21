@@ -11,8 +11,18 @@ const SOURCE_LABELS = {
 };
 
 let resultData = null;
+
+// 取り消しの履歴。1 件は「その操作の直前に、どの科目がどのコマにいたか」。
+// 合同科目と前後期の対応科目は一緒に動くため、画面側は掴んだ 1 件しか
+// 知らない。何を戻せばよいかはサーバが move の応答で教えてくれる。
+let undoStack = [];
+const UNDO_LIMIT = 50;
 let currentDepartment = "経営";
 let currentTerm = "前期";
+// 学科別か教員別か。教員は 82 名中 56 名が 3 学科以上にまたがるため、
+// 学科のビューを渡り歩かないと 1 人の週の予定が分からなかった。
+let currentView = "department";
+let currentTeacher = null;
 
 function parseSlot(label) {
   return { day: label.slice(0, 1), period: Number(label.slice(1)) };
@@ -28,21 +38,59 @@ function violatingCodes() {
   return codes;
 }
 
+function teachersWithClasses() {
+  const counts = new Map();
+  resultData.placements.forEach((p) => {
+    counts.set(p.teacher, (counts.get(p.teacher) || 0) + p.slots.length);
+  });
+  return [...counts.keys()].sort((a, b) => a.localeCompare(b, "ja"));
+}
+
 function renderTabs() {
   const departments = ["経営", "会計", "短期大学部"];
   const terms = ["前期", "後期"];
+  const teachers = teachersWithClasses();
+  if (currentView === "teacher" && !teachers.includes(currentTeacher)) {
+    currentTeacher = teachers[0] || null;
+  }
+
+  const axis = currentView === "department"
+    ? `<div class="group">
+         ${departments.map((d) => `
+           <button class="dept-tab${d === currentDepartment ? " active" : ""}"
+                   data-dept="${d}">${escapeHtml(d)}</button>`).join("")}
+       </div>`
+    : `<div class="group">
+         <label class="teacher-pick">
+           <span>教員</span>
+           <select id="teacher-select">
+             ${teachers.map((name) => `
+               <option value="${escapeHtml(name)}"${name === currentTeacher ? " selected" : ""}>
+                 ${escapeHtml(name)}</option>`).join("")}
+           </select>
+         </label>
+       </div>`;
+
   document.getElementById("result-tabs").innerHTML = `
-    <div class="group">
-      ${departments.map((d) => `
-        <button class="dept-tab${d === currentDepartment ? " active" : ""}"
-                data-dept="${d}">${d}</button>`).join("")}
+    <div class="group view-switch">
+      <button class="view-tab${currentView === "department" ? " active" : ""}"
+              data-view-mode="department">学科別</button>
+      <button class="view-tab${currentView === "teacher" ? " active" : ""}"
+              data-view-mode="teacher">教員別</button>
     </div>
+    ${axis}
     <div class="group">
       ${terms.map((t) => `
         <button class="term-tab${t === currentTerm ? " active" : ""}"
                 data-term="${t}">${t}</button>`).join("")}
     </div>`;
 
+  document.querySelectorAll(".view-tab").forEach((button) => {
+    button.addEventListener("click", () => {
+      currentView = button.dataset.viewMode;
+      renderTimetable();
+    });
+  });
   document.querySelectorAll(".dept-tab").forEach((button) => {
     button.addEventListener("click", () => {
       currentDepartment = button.dataset.dept;
@@ -55,6 +103,13 @@ function renderTabs() {
       renderTimetable();
     });
   });
+  const picker = document.getElementById("teacher-select");
+  if (picker) {
+    picker.addEventListener("change", () => {
+      currentTeacher = picker.value;
+      renderTimetable();
+    });
+  }
 }
 
 // 前①・後① は学期の前半、前②・後② は後半に開講する。カード左端の
@@ -62,7 +117,7 @@ function renderTabs() {
 // 「学期のどこで開くか」が形で分かる。
 const QUARTER_HALVES = { "前①": "first", "後①": "first", "前②": "second", "後②": "second" };
 
-function cardHtml(placement, grabbedLabel, isViolating) {
+function cardHtml(placement, grabbedLabel, isViolating, showDepartment) {
   const source = escapeHtml(placement.source);
   const half = QUARTER_HALVES[placement.quarter];
   const sourceLabel = SOURCE_LABELS[placement.source] || placement.source;
@@ -79,15 +134,26 @@ function cardHtml(placement, grabbedLabel, isViolating) {
       <span class="card-rail" aria-hidden="true"></span>
       <span class="card-year y${escapeHtml(String(placement.year))}">${escapeHtml(String(placement.year))}年</span>
       <span class="card-name">${escapeHtml(placement.name)}</span>
-      <span class="card-meta">${escapeHtml(placement.teacher)}・${escapeHtml(placement.category)}</span>
+      <span class="card-meta">${escapeHtml(
+        showDepartment ? placement.department : placement.teacher
+      )}・${escapeHtml(placement.category)}</span>
     </div>`;
+}
+
+function visiblePlacements() {
+  // 教員別では学科をまたいで集める。学科別では担当教員をまたいで集める。
+  return resultData.placements.filter((p) =>
+    p.term === currentTerm
+    && (currentView === "teacher"
+      ? p.teacher === currentTeacher
+      : p.department === currentDepartment)
+  );
 }
 
 function renderGrid() {
   const violating = violatingCodes();
-  const visible = resultData.placements.filter(
-    (p) => p.department === currentDepartment && p.term === currentTerm
-  );
+  const byTeacher = currentView === "teacher";
+  const visible = visiblePlacements();
 
   const rows = PERIODS.map((period) => {
     const cells = DAYS.map((day) => {
@@ -102,7 +168,7 @@ function renderGrid() {
           a.name.localeCompare(b.name, "ja") ||
           a.code.localeCompare(b.code)
         )
-        .map((p) => cardHtml(p, label, violating.has(p.code)))
+        .map((p) => cardHtml(p, label, violating.has(p.code), byTeacher))
         .join("");
       return `<td data-slot="${label}">${cards}</td>`;
     }).join("");
@@ -131,6 +197,47 @@ function setCount(id, value, alert) {
   const element = document.getElementById(id);
   element.textContent = String(value);
   element.classList.toggle("alert", Boolean(alert) && value > 0);
+}
+
+const DAYS_ORDER = ["月", "火", "水", "木", "金"];
+
+function renderTeacherPanel() {
+  const panel = document.getElementById("teacher-panel");
+  if (currentView !== "teacher" || !currentTeacher) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+
+  const mine = resultData.placements.filter((p) => p.teacher === currentTeacher);
+  const thisTerm = mine.filter((p) => p.term === currentTerm);
+  const perDay = DAYS_ORDER.map((day) => ({
+    day,
+    count: thisTerm.reduce(
+      (total, p) => total + p.slots.filter((s) => s.startsWith(day)).length, 0
+    ),
+  }));
+  const info = (resultData.teachers || []).find((t) => t.name === currentTeacher);
+  const facts = [`<span class="tally">区分 <b>${escapeHtml(info ? info.kind : "不明")}</b></span>`];
+  if (info && info.research_day) {
+    facts.push(`<span class="tally">研究日 <b>${escapeHtml(info.research_day)}</b></span>`);
+  }
+  if (info && info.available_slots.length) {
+    facts.push(`<span class="tally">出勤可能 <b>${info.available_slots.length}</b> コマ</span>`);
+  }
+
+  panel.innerHTML = `
+    <div class="teacher-head">
+      <span class="teacher-name">${escapeHtml(currentTeacher)}</span>
+      ${facts.join("")}
+    </div>
+    <div class="teacher-load">
+      <span class="tally">${escapeHtml(currentTerm)} <b>${thisTerm.length}</b> コマ</span>
+      <span class="tally">通年 <b>${mine.length}</b> コマ</span>
+      ${perDay.map(({ day, count }) => `
+        <span class="day-load${count === 0 ? " empty" : ""}">
+          ${day}<b>${count}</b></span>`).join("")}
+    </div>`;
 }
 
 function renderSide() {
@@ -213,6 +320,51 @@ function slotsFromScratch(subject, targetLabel) {
   return slots;
 }
 
+function rememberForUndo(previous) {
+  if (!previous || !previous.length) return;
+  undoStack.push(previous);
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  updateUndoButton();
+}
+
+function updateUndoButton() {
+  const button = document.getElementById("undo-button");
+  if (!button) return;
+  button.disabled = undoStack.length === 0;
+  button.title = undoStack.length
+    ? `直前の移動を取り消します（あと ${undoStack.length} 回）`
+    : "取り消せる移動はありません";
+}
+
+async function undoLastMove() {
+  const previous = undoStack.pop();
+  updateUndoButton();
+  if (!previous) return;
+
+  // まず元のコマへ戻す。1 件戻せば、同じコマに入る仲間もついてくる。
+  const placed = previous.find((entry) => entry.slots.length);
+  try {
+    if (placed) {
+      const body = await api.moveSubject(
+        window.appState.sessionId, placed.code, placed.slots
+      );
+      if (!body.applied) {
+        window.alert("元の位置へ戻せませんでした。手で戻してください。");
+        return;
+      }
+    }
+    // 元は未配置だったものを未配置へ返す
+    for (const entry of previous) {
+      if (!entry.slots.length) {
+        await api.unplaceSubject(window.appState.sessionId, entry.code);
+      }
+    }
+    await renderTimetable();
+  } catch (error) {
+    window.alert(`取り消しに失敗しました: ${error.message}`);
+  }
+}
+
 async function moveCard(code, grabbedLabel, targetLabel) {
   const placement = resultData.placements.find((p) => p.code === code);
   const unplaced = resultData.unplaced.find((s) => s.code === code);
@@ -234,6 +386,7 @@ async function moveCard(code, grabbedLabel, targetLabel) {
       window.alert(`この位置には配置できません:\n${reasons}`);
       return;
     }
+    rememberForUndo(body.previous);
     await renderTimetable();
   } catch (error) {
     window.alert(`移動に失敗しました: ${error.message}`);
@@ -259,11 +412,21 @@ async function renderTimetable() {
     return;
   }
   renderTabs();
+  renderTeacherPanel();
   renderGrid();
   renderSide();
 }
 
 function initTimetable() {
+  document.getElementById("undo-button").addEventListener("click", undoLastMove);
+  document.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "z") {
+      // 結果画面を開いているときだけ効かせる
+      if (!document.getElementById("view-result").classList.contains("active")) return;
+      event.preventDefault();
+      undoLastMove();
+    }
+  });
   document.getElementById("export-button").addEventListener("click", () => {
     if (!window.appState.sessionId) return;
     window.location.href = api.exportUrl(window.appState.sessionId);

@@ -51,17 +51,30 @@ def test_prompt_includes_feasible_candidates():
     assert "月1" not in prompt.split("候補", 1)[1].split("\n")[0]
 
 
-def test_prompt_includes_teacher_occupancy():
-    a, b = make("A1"), make("B1", teacher="教員乙")
+def test_prompt_shows_where_this_chunk_s_teachers_already_are():
+    """配置する科目の担当教員が、既にどのコマを持っているかを伝える。"""
+    a, b = make("A1"), make("B1")
+    ctx = Context.from_lists([a, b], [Teacher("教員甲", TeacherKind.FULL_TIME)])
+    tt = Timetable()
+    tt.place("A1", (TimeSlot("月", 1),), AssignmentSource.PRELOCK)
+
+    prompt = build_placement_prompt(ctx, tt, ["B1"])
+    assert "教員甲: 月1" in prompt
+
+
+def test_prompt_leaves_out_teachers_this_chunk_never_touches():
+    """時間割が埋まると全教員の占有がプロンプトの 76% を占めていた。
+    このリクエストに関係しない教員は載せない。"""
+    a, b = make("A1", teacher="無関係先生"), make("B1", teacher="担当先生")
     ctx = Context.from_lists([a, b], [
-        Teacher("教員甲", TeacherKind.FULL_TIME),
-        Teacher("教員乙", TeacherKind.FULL_TIME),
+        Teacher("無関係先生", TeacherKind.FULL_TIME),
+        Teacher("担当先生", TeacherKind.FULL_TIME),
     ])
     tt = Timetable()
     tt.place("A1", (TimeSlot("月", 1),), AssignmentSource.PRELOCK)
 
     prompt = build_placement_prompt(ctx, tt, ["B1"])
-    assert "教員甲" in prompt
+    assert "無関係先生" not in prompt
 
 
 def test_prompt_includes_feedback_when_given():

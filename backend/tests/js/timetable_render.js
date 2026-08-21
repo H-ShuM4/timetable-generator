@@ -9,8 +9,8 @@ const path = require("path");
 const { createDocument, attributeValues } = require("./dom_stub.js");
 const JS_DIR = path.join(__dirname, "..", "..", "..", "frontend", "js");
 
-function load(result) {
-  const document = createDocument();
+function load(result, matchers) {
+  const document = createDocument({ matchers: matchers || {} });
   const sandbox = {
     console,
     document,
@@ -50,6 +50,22 @@ const withViolation = {
   placements: [placement("V1", "科目甲", 1, ["火2"]), placement("V2", "科目乙", 1, ["火3"])],
   unplaced: [], intensive: [],
   violations: [{ rule_id: "H2", subject_code: "V1", message: "重複", related_code: "V2" }],
+};
+
+// 教員ビューの検証用。1 人の教員が学科をまたいで持つ状態を作る。
+const acrossDepartments = {
+  placements: [
+    placement("M1", "経営の科目", 1, ["月1"], { teacher: "渡り先生", department: "経営" }),
+    placement("A1", "会計の科目", 2, ["火2"], { teacher: "渡り先生", department: "会計" }),
+    placement("J1", "短大の科目", 1, ["水3"], { teacher: "渡り先生", department: "短期大学部" }),
+    placement("X1", "別の先生の科目", 1, ["月1"], { teacher: "別先生", department: "経営" }),
+    placement("L1", "後期の科目", 1, ["木4"], { teacher: "渡り先生", term: "後期" }),
+  ],
+  unplaced: [], intensive: [], violations: [],
+  teachers: [
+    { name: "渡り先生", kind: "専任", research_day: "金", available_slots: [] },
+    { name: "別先生", kind: "非常勤", research_day: null, available_slots: ["月1", "月2"] },
+  ],
 };
 
 // 期間レールの検証用。開講期間が違う 3 枚を同じコマに置く。
@@ -105,6 +121,22 @@ function run() {
 
   sandbox.renderSide();
   out.unplaced_html = sandbox.document.nodes["unplaced-list"].innerHTML;
+
+  sandbox = load(acrossDepartments);
+  vm.runInContext('currentView = "teacher"; currentTeacher = "渡り先生";', sandbox);
+  sandbox.renderGrid();
+  const teacherGrid = sandbox.document.nodes["timetable-grid"].innerHTML;
+  out.teacher_view_codes = attributeValues(teacherGrid, "data-code");
+  out.teacher_view_meta = (teacherGrid.match(/class="card-meta">([^<]*)</g) || [])
+    .map((m) => m.match(/>([^<]*)</)[1].trim());
+  sandbox.renderTeacherPanel();
+  const panel = sandbox.document.nodes["teacher-panel"];
+  out.teacher_panel_hidden = panel.hidden;
+  out.teacher_panel = panel.innerHTML.replace(/\s+/g, " ").trim();
+
+  sandbox = load(acrossDepartments);
+  sandbox.renderTeacherPanel();
+  out.panel_hidden_in_department_view = sandbox.document.nodes["teacher-panel"].hidden;
 
   sandbox = load({
     placements: [placement("X1", '<script>"x"', 1, ["月1"])],

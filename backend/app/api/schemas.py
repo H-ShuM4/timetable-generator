@@ -96,12 +96,22 @@ class SubjectRef(BaseModel):
     """未配置科目を画面から置くとき、必要なコマ数を組み立てるのに使う。"""
 
 
+class TeacherOut(BaseModel):
+    name: str
+    kind: str
+    research_day: str | None
+    available_slots: list[str]
+    """非常勤のみ。空なら曜日・時限の制限なし。"""
+
+
 class ResultOut(BaseModel):
     status: str
     placements: list[PlacementOut]
     unplaced: list[SubjectRef]
     violations: list[ViolationOut]
     intensive: list[SubjectRef]
+    teachers: list[TeacherOut] = []
+    """教員ビューで勤務条件と照らし合わせるために返す。"""
     error: str | None = None
 
 
@@ -110,6 +120,22 @@ class MoveIn(BaseModel):
     slots: list[str] = Field(min_length=1)
 
 
+class SlotState(BaseModel):
+    code: str
+    slots: list[str]
+    """空のリストは未配置を表す。"""
+
+
 class MoveOut(BaseModel):
     applied: bool
     violations: list[ViolationOut]
+    previous: list[SlotState] = []
+    """移動が触れた科目の、移動前の状態。取り消しのために返す。
+
+    合同科目と前後期の対応科目は一緒に動くため、画面側は自分が
+    掴んだ 1 件しか知らない。何を戻せばよいかはサーバが答える。
+    """
+
+
+class UnplaceIn(BaseModel):
+    code: str

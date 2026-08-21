@@ -192,3 +192,47 @@ def test_placing_an_unplaced_subject_still_respects_constraints():
     assert body["applied"] is False
     assert [v["rule_id"] for v in body["violations"]] == ["H2"]
     assert not data.result.timetable.slot_of("A2")
+
+
+def test_placing_an_unplaced_subject_removes_it_from_the_unplaced_list():
+    """置いたのに未配置のままだと、一覧と時間割が食い違う。"""
+    from app.session_store import store
+
+    session_id = _prepare()
+    data = store.get(session_id)
+    data.result.timetable.remove("A2")
+    data.result.unplaced = ["A2"]
+
+    client.post(f"/api/result/{session_id}/move", json={"code": "A2", "slots": ["木4"]})
+    body = client.get(f"/api/result/{session_id}").json()
+    assert [s["code"] for s in body["unplaced"]] == []
+
+
+def test_unplacing_returns_a_subject_to_the_unplaced_list():
+    from app.session_store import store
+
+    session_id = _prepare()
+    data = store.get(session_id)
+    before = [str(s) for s in data.result.timetable.slot_of("A1")]
+
+    body = client.post(f"/api/result/{session_id}/unplace", json={"code": "A1"}).json()
+    assert body["applied"] is True
+    assert body["previous"] == [{"code": "A1", "slots": before}]
+    assert not data.result.timetable.slot_of("A1")
+
+    listed = client.get(f"/api/result/{session_id}").json()["unplaced"]
+    assert [s["code"] for s in listed] == ["A1"]
+
+
+def test_a_move_reports_what_it_touched_so_it_can_be_undone():
+    """画面側は掴んだ 1 件しか知らない。何を戻せばよいかはサーバが答える。"""
+    session_id, _ = _prepare_joint()
+    body = client.post(
+        f"/api/result/{session_id}/move", json={"code": "A1", "slots": ["金4"]}
+    ).json()
+    assert body["applied"] is True
+    # 合同の相手も動くので、戻すべき対象として両方が返る
+    assert body["previous"] == [
+        {"code": "A1", "slots": ["月1"]},
+        {"code": "B1", "slots": ["月1"]},
+    ]

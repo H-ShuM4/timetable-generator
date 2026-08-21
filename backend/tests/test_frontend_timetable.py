@@ -83,3 +83,38 @@ def test_the_year_chip_uses_one_step_per_year(run_js):
 def test_a_violating_card_is_marked(run_js):
     """違反は朱。事務で訂正を書き入れる色をその意味だけに使う。"""
     assert "violating" in run_js("timetable_render.js")["violating_html"]
+
+
+def test_the_teacher_view_gathers_classes_across_departments(run_js):
+    """82 名中 56 名が 3 学科以上にまたがる。学科のビューを渡り歩かずに
+    1 人の週の予定が読めること。"""
+    out = run_js("timetable_render.js")
+    assert out["teacher_view_codes"] == ["M1", "A1", "J1"]
+
+
+def test_the_teacher_view_names_the_department_instead_of_the_teacher(run_js):
+    """担当が固定されているので、カードには学科を出す。"""
+    assert run_js("timetable_render.js")["teacher_view_meta"] == [
+        "経営・必修", "会計・必修", "短期大学部・必修",
+    ]
+
+
+def test_the_teacher_view_leaves_out_the_other_term(run_js):
+    """後期の科目は前期のグリッドに出さない。"""
+    assert "L1" not in run_js("timetable_render.js")["teacher_view_codes"]
+
+
+def test_the_teacher_panel_shows_the_load_against_the_working_conditions(run_js):
+    """「この先生、水曜が詰まりすぎでは」に気づけるようにする。"""
+    panel = run_js("timetable_render.js")["teacher_panel"]
+    assert "渡り先生" in panel
+    assert "区分 <b>専任</b>" in panel
+    assert "研究日 <b>金</b>" in panel
+    assert "前期 <b>3</b> コマ" in panel
+    assert "通年 <b>4</b> コマ" in panel
+
+
+def test_the_teacher_panel_stays_out_of_the_way_in_the_department_view(run_js):
+    out = run_js("timetable_render.js")
+    assert out["teacher_panel_hidden"] is False
+    assert out["panel_hidden_in_department_view"] is True

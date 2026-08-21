@@ -58,6 +58,13 @@ const api = {
   getResult(sessionId) {
     return request(`/api/result/${sessionId}`);
   },
+  unplaceSubject(sessionId, code) {
+    return request(`/api/result/${sessionId}/unplace`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+  },
   moveSubject(sessionId, code, slots) {
     return request(`/api/result/${sessionId}/move`, {
       method: "POST",

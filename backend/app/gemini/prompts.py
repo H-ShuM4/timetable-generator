@@ -56,11 +56,20 @@ def _slots_label(slots: tuple[TimeSlot, ...]) -> str:
     return "+".join(slot_label(slot) for slot in slots)
 
 
-def _teacher_occupancy(context: Context, timetable: Timetable) -> list[str]:
+def _teacher_occupancy(
+    context: Context, timetable: Timetable, teachers: set[str]
+) -> list[str]:
+    """このリクエストで配置する科目の担当教員について、既に埋まっているコマ。
+
+    **全教員を載せない。** 時間割が埋まってくると、教員 82 名分の占有が
+    プロンプトの 76% を占めるようになる。1 リクエストで扱う科目の担当は
+    数名なので、残りは AI の判断に関係しない。候補コマの一覧が既に全制約
+    を通した結果なので、占有情報は担当教員の状況を補足するためだけにある。
+    """
     used: dict[str, list[str]] = {}
     for code, assignment in timetable.assignments.items():
         subject = context.subjects.get(code)
-        if subject is None or not subject.teacher:
+        if subject is None or subject.teacher not in teachers:
             continue
         used.setdefault(subject.teacher, []).extend(
             slot_label(slot) for slot in assignment.slots
@@ -120,7 +129,12 @@ def build_placement_prompt(
             f"候補: {candidates}"
         )
 
-    occupancy = _teacher_occupancy(context, timetable)
+    teachers = {
+        context.subjects[code].teacher
+        for code in codes
+        if code in context.subjects and context.subjects[code].teacher
+    }
+    occupancy = _teacher_occupancy(context, timetable, teachers)
     if occupancy:
         lines += ["", "## 既に埋まっている教員のコマ", *occupancy]
 

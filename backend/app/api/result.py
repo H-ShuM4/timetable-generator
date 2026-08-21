@@ -5,7 +5,17 @@
 """
 from fastapi import APIRouter, HTTPException
 
-from app.api.schemas import MoveIn, MoveOut, PlacementOut, ResultOut, SubjectRef, ViolationOut
+from app.api.schemas import (
+    MoveIn,
+    MoveOut,
+    PlacementOut,
+    ResultOut,
+    SlotState,
+    SubjectRef,
+    TeacherOut,
+    UnplaceIn,
+    ViolationOut,
+)
 from app.constraints.linking import linked_group
 from app.constraints.validator import check_placement, validate_all
 from app.gemini.prompts import parse_slot_label, slot_label
@@ -31,6 +41,19 @@ def _to_violation(violation) -> ViolationOut:
     )
 
 
+def _to_teacher_refs(context) -> list[TeacherOut]:
+    """教員ビューで担当コマ数と勤務条件を突き合わせるために返す。"""
+    return [
+        TeacherOut(
+            name=teacher.name,
+            kind=teacher.kind.value,
+            research_day=teacher.research_day,
+            available_slots=sorted(f"{s.day}{s.period}" for s in teacher.available_slots),
+        )
+        for teacher in sorted(context.teachers.values(), key=lambda t: t.name)
+    ]
+
+
 def _to_subject_refs(codes: list[str], context) -> list[SubjectRef]:
     refs: list[SubjectRef] = []
     for code in codes:
@@ -49,6 +72,34 @@ def _to_subject_refs(codes: list[str], context) -> list[SubjectRef]:
             requires_consecutive=subject.requires_consecutive,
         ))
     return refs
+
+
+@router.post("/{session_id}/unplace", response_model=MoveOut)
+async def unplace(session_id: str, payload: UnplaceIn) -> MoveOut:
+    """科目を時間割から外し、未配置一覧へ戻す。
+
+    未配置科目を手で置いた操作を取り消すために要る。外すだけなので
+    制約に触れることはなく、必ず成功する。
+    """
+    data = _require_session(session_id)
+    if data.result is None:
+        raise HTTPException(status_code=409, detail="まだ生成が完了していません")
+
+    context = data.context
+    if payload.code not in context.subjects:
+        raise HTTPException(status_code=404, detail="科目が見つかりません")
+
+    timetable = data.result.timetable
+    previous = [
+        SlotState(code=payload.code, slots=[str(s) for s in timetable.slot_of(payload.code)])
+    ]
+    timetable.remove(payload.code)
+    if payload.code not in data.result.unplaced:
+        data.result.unplaced.append(payload.code)
+
+    data.result.violations = validate_all(context, timetable)
+    store.save_result(session_id)
+    return MoveOut(applied=True, violations=[], previous=previous)
 
 
 @router.get("/{session_id}", response_model=ResultOut)
@@ -87,6 +138,7 @@ async def get_result(session_id: str) -> ResultOut:
         unplaced=_to_subject_refs(data.result.unplaced, context),
         violations=[_to_violation(v) for v in data.result.violations],
         intensive=_to_subject_refs(data.result.intensive_codes, context),
+        teachers=_to_teacher_refs(context),
     )
 
 
@@ -108,6 +160,12 @@ async def move(session_id: str, payload: MoveIn) -> MoveOut:
 
     timetable = data.result.timetable
     group = linked_group(context, subject)
+    # 取り消しのために、動かす前の状態をグループ全員ぶん控える。
+    # 未配置だった科目は空のリストで表す。
+    previous = [
+        SlotState(code=code, slots=[str(s) for s in timetable.slot_of(code)])
+        for code in group
+    ]
 
     # グループを一度すべて外してから検証する。H4 と H12 が同一コマを
     # 要求するため、片方を置いたまま相手を動かそうとすると必ず弾かれる。
@@ -140,7 +198,11 @@ async def move(session_id: str, payload: MoveIn) -> MoveOut:
             timetable.place(code, slots_before, source)
         return MoveOut(applied=False, violations=[_to_violation(v) for v in violations])
 
+    # 置いたものは未配置ではない。ここを忘れると一覧と時間割が食い違う。
+    data.result.unplaced = [
+        code for code in data.result.unplaced if not timetable.is_placed(code)
+    ]
     data.result.violations = validate_all(context, timetable)
     store.save_result(session_id)
 
-    return MoveOut(applied=True, violations=[])
+    return MoveOut(applied=True, violations=[], previous=previous)
