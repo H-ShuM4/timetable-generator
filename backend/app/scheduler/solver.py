@@ -5,6 +5,8 @@ Gemini が収束しなかった科目を確実に埋めるための最終手段�
 先へ進む。必ず有限時間で終わり、部分解を返す。
 """
 from app.constraints.context import Context
+from app.constraints.linking import linked_group
+from app.constraints.validator import check_placement
 from app.models.timeslot import TimeSlot
 from app.models.timetable import AssignmentSource, Timetable
 from app.scheduler.candidates import feasible_slot_sets
@@ -24,6 +26,46 @@ def _adjacent_partner_placed(context: Context, timetable: Timetable, code: str) 
         and timetable.is_placed(other_code)
         for other_code, other in context.subjects.items()
     )
+
+
+def _pending_partners(context: Context, code: str, pending: set[str]) -> list[str]:
+    """code と同じコマに入るべきで、まだ処理待ちの科目。
+
+    候補が 1 つも無く未配置として記録済みの科目は pending に無いので
+    対象にならない。一度未配置と決めたものを後から置くと、未配置一覧と
+    時間割が食い違う。
+    """
+    return [
+        other for other in linked_group(context, context.subjects[code])
+        if other != code and other in pending
+    ]
+
+
+def _options_for_the_whole_group(
+    context: Context,
+    timetable: Timetable,
+    options: list[tuple[TimeSlot, ...]],
+    partners: list[str],
+) -> list[tuple[TimeSlot, ...]]:
+    """相手も一緒に置ける候補だけに絞る。
+
+    H4 と H12 は「置いたあと」にしか効かない。前期の科目を先に置いて
+    しまうと、後期の相手はそのコマしか選べなくなり、そこが後期の別の
+    必修で埋まっていれば詰む。実データではこれで日本語リテラシーの
+    4 科目が置けなくなっていた（前期の相手が月1 に入り、後期の月1 は
+    情報処理Ⅰ【A】が占めていた）。
+
+    相手は別の学期なので、こちらを置いても相手の判定は変わらない。
+    H1・H2・H3 はいずれも開講期間が重なる科目しか見ないためである。
+    したがって現在の時間割のまま相手を検査してよい。
+    """
+    return [
+        slots for slots in options
+        if all(
+            not check_placement(context, timetable, context.subjects[partner], slots)
+            for partner in partners
+        )
+    ]
 
 
 def solve(
@@ -75,10 +117,24 @@ def solve(
         if not options:
             unplaced.append(code)
             continue
-        timetable.place(
-            code, best_option(timetable, context.subjects[code], options, context),
-            AssignmentSource.SOLVER,
-        )
+
+        # 同じコマに入るべき相手がまだ置かれていなければ、相手も置ける
+        # 候補だけに絞る。相手ごと詰むコマを先に潰しておく。
+        partners = _pending_partners(context, code, set(remaining))
+        if partners:
+            shared = _options_for_the_whole_group(context, timetable, options, partners)
+            # 全員が入れるコマが 1 つも無い場合は、この科目だけでも置く。
+            # 相手は置けなくなるが、誰も置かないより配置数は多くなる。
+            options = shared or options
+
+        chosen = best_option(timetable, context.subjects[code], options, context)
+        timetable.place(code, chosen, AssignmentSource.SOLVER)
+        # 相手も同じコマへ確定させる。ここで置かないと、次の反復までに
+        # 別の科目がそのコマを埋めてしまう可能性がある。
+        for partner in partners:
+            if not check_placement(context, timetable, context.subjects[partner], chosen):
+                timetable.place(partner, chosen, AssignmentSource.SOLVER)
+                remaining.remove(partner)
 
     unplaced.extend(remaining)
     return unplaced
