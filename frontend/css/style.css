@@ -24,15 +24,16 @@
   --surface: #ffffff;
   --rule: #dbe1e9;
   --rule-soft: #eceff4;
+  --grid-line: #c2ccd8;
   --vermilion: #c0392b;
   --vermilion-wash: #fdeceb;
   --amber: #a4690f;
 
   /* 年次は順序のあるデータなので、色相ではなく藍の濃淡で表す */
-  --year-1: #e7edf5;
-  --year-2: #cfdcea;
-  --year-3: #adc3dd;
-  --year-4: #86a5c8;
+  --year-1: #eef2f7;
+  --year-2: #c2d5e8;
+  --year-3: #7ba3cb;
+  --year-4: #2f5f92;
 
   /* 配置元。墨＝動かせない、藍＝AI、淡藍＝ソルバー、山吹＝人、灰＝去年のまま */
   --src-prelock: #15202b;
@@ -222,6 +223,12 @@ input:focus, select:focus { border-color: var(--indigo-dim); }
 #dropzone.dragover { border-color: var(--indigo); background: var(--indigo-wash); }
 #dropzone p { margin: 0 0 0.5rem; }
 
+/* 入力域と実行ボタンの間は広く取る。誤って押す事故を減らす。 */
+#file-assign:not(:empty) { margin-top: 1.25rem; }
+#upload-button, #generate-button { margin-top: 1.5rem; }
+#mode-select { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+#mode-select label { display: flex; align-items: center; gap: 0.375rem; cursor: pointer; }
+
 #upload-warnings ul { margin: 0.5rem 0 0; padding-left: 1.25rem; }
 #upload-warnings li { font-size: 0.8125rem; color: var(--amber); }
 
@@ -277,7 +284,8 @@ table.timetable thead th {
   top: 0;
   z-index: 2;
   background: var(--surface);
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--grid-line);
+  border-right: 1px solid var(--grid-line);
   padding: 0.5rem 0.25rem;
   font-size: 0.8125rem;
   font-weight: 700;
@@ -297,8 +305,8 @@ table.timetable tbody th {
   z-index: 1;
   width: 3.25rem;
   background: var(--surface);
-  border-right: 1px solid var(--rule);
-  border-bottom: 1px solid var(--rule-soft);
+  border-right: 1px solid var(--grid-line);
+  border-bottom: 1px solid var(--grid-line);
   vertical-align: top;
   padding: 0.5rem 0.25rem;
   text-align: center;
@@ -320,12 +328,12 @@ table.timetable tbody th {
 }
 
 table.timetable td {
-  border-right: 1px solid var(--rule-soft);
-  border-bottom: 1px solid var(--rule-soft);
-  padding: 0.25rem;
+  border-right: 1px solid var(--grid-line);
+  border-bottom: 1px solid var(--grid-line);
+  padding: 0.3125rem;
   vertical-align: top;
   min-width: 10rem;
-  height: 5.5rem;
+  height: 7rem;
   transition: background 0.1s;
 }
 table.timetable td.dragover { background: var(--indigo-wash); box-shadow: inset 0 0 0 2px var(--indigo); }
@@ -387,9 +395,10 @@ table.timetable td.dragover { background: var(--indigo-wash); box-shadow: inset 
   color: var(--indigo-deep);
   background: var(--year-1);
 }
+.card-year.y1 { border: 1px solid var(--year-2); padding: 0 0.1875rem; }
 .card-year.y2 { background: var(--year-2); }
 .card-year.y3 { background: var(--year-3); }
-.card-year.y4 { background: var(--year-4); }
+.card-year.y4 { background: var(--year-4); color: #fff; }
 
 .card-name { grid-area: name; font-weight: 700; }
 .card-meta { grid-area: meta; color: var(--ink-soft); font-size: 0.6875rem; }
@@ -435,8 +444,17 @@ table.timetable td.dragover { background: var(--indigo-wash); box-shadow: inset 
   color: var(--ink-soft);
 }
 .count.alert { background: var(--vermilion); color: #fff; }
+/* 警告は違反ではない。朱は制約違反だけに使う。 */
+.count.warn { background: var(--amber); color: #fff; }
 
-.side-block ul { margin: 0; padding: 0; list-style: none; font-size: 0.75rem; }
+.side-block ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.75rem;
+  max-height: 15rem;
+  overflow-y: auto;
+}
 .side-block li { padding: 0.25rem 0; border-top: 1px solid var(--rule-soft); line-height: 1.5; }
 .side-block li:first-child { border-top: 0; }
 
@@ -506,3 +524,35 @@ table.timetable td.dragover { background: var(--indigo-wash); box-shadow: inset 
   .result-layout { grid-template-columns: minmax(0, 1fr); }
   .grid-wrap { max-height: none; }
 }
+
+/* ---------------------------------------------------------------- 読込結果 */
+
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.stat { display: flex; flex-direction: column; }
+.stat-value {
+  font-family: var(--font-data);
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--indigo-deep);
+}
+.stat-label { font-size: 0.75rem; color: var(--ink-soft); letter-spacing: 0.06em; }
+
+.breakdown { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1.25rem; }
+.breakdown dt { font-size: 0.75rem; color: var(--ink-soft); letter-spacing: 0.04em; }
+.breakdown dd { margin: 0; display: flex; flex-wrap: wrap; gap: 0.375rem; }
+.tally {
+  font-size: 0.75rem;
+  padding: 0.0625rem 0.4375rem;
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1px solid var(--rule-soft);
+}
+.tally b { font-family: var(--font-data); font-weight: 600; color: var(--indigo-deep); }

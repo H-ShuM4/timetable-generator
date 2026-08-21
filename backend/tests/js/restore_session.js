@@ -11,6 +11,8 @@ const path = require("path");
 
 const UPLOAD_JS = path.join(__dirname, "..", "..", "..", "frontend", "js", "upload.js");
 
+const { createDocument } = require("./dom_stub.js");
+
 function element(id) {
   return {
     id, innerHTML: "", textContent: "", disabled: true, prepended: null,
@@ -71,10 +73,39 @@ function run(resultStatus, savedSessionId) {
   }));
 }
 
+function summaryMarkup() {
+  const document = createDocument();
+  const sandbox = {
+    console, document, api: {},
+    window: { appState: {}, localStorage: { getItem: () => null, setItem() {}, removeItem() {} } },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "..", "..",
+    "frontend", "js", "logviewer.js"), "utf8"), sandbox);
+  vm.runInContext(fs.readFileSync(UPLOAD_JS, "utf8"), sandbox);
+  sandbox.renderSummary({
+    subject_count: 658, teacher_count: 99, intensive_count: 45, quarter_count: 47,
+    by_department: { "会計": 234, "経営": 262 },
+    by_category: { "必修": 344 },
+    by_teacher_kind: { "非常勤": 59 },
+    has_previous_year: false,
+  });
+  sandbox.renderWarnings([{ kind: "missing_availability", message: "出勤可能日が空欄です" }]);
+  return {
+    stats: (document.nodes["upload-summary"].innerHTML
+      .match(/class="stat-value">(\d+)</g) || []).map((m) => m.match(/>(\d+)</)[1]),
+    tallies: (document.nodes["upload-summary"].innerHTML
+      .match(/class="tally">([^<]*)</g) || []).map((m) => m.match(/>([^<]*)</)[1].trim()),
+    warning_count_class: (document.nodes["upload-warnings"].innerHTML
+      .match(/class="(count [a-z]+)"/) || [])[1] || null,
+  };
+}
+
 (async () => {
   console.log(JSON.stringify({
     with_result: await run("done", "abc123"),
     without_result: await run("pending", "abc123"),
     nothing_saved: await run("done", null),
+    summary: summaryMarkup(),
   }));
 })();

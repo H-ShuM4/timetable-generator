@@ -54,40 +54,57 @@ function addFiles(fileList) {
   renderFileAssignment();
 }
 
+function tallies(counts) {
+  // 内訳は「会計 234 / 経営 262」と 1 行に潰すより、数字を拾える形にする。
+  return Object.entries(counts)
+    .map(([key, value]) => `<span class="tally">${escapeHtml(key)} <b>${value}</b></span>`)
+    .join("");
+}
+
 function renderSummary(summary) {
-  const entries = [
-    ["科目数", summary.subject_count],
-    ["教員数", summary.teacher_count],
+  const stats = [
+    ["科目", summary.subject_count],
+    ["教員", summary.teacher_count],
     ["集中講義", summary.intensive_count],
     ["クオーター科目", summary.quarter_count],
   ];
-  const byDept = Object.entries(summary.by_department)
-    .map(([key, value]) => `${key} ${value}`).join(" / ");
-  const byCat = Object.entries(summary.by_category)
-    .map(([key, value]) => `${key} ${value}`).join(" / ");
-  const byKind = Object.entries(summary.by_teacher_kind)
-    .map(([key, value]) => `${key} ${value}`).join(" / ");
+  const breakdown = [
+    ["学科別", tallies(summary.by_department)],
+    ["科目区分別", tallies(summary.by_category)],
+    ["教員区分別", tallies(summary.by_teacher_kind)],
+    ["前年度データ",
+      `<span class="tally">${summary.has_previous_year ? "あり" : "なし"}</span>`],
+  ];
 
   document.getElementById("upload-summary").innerHTML = `
-    <h3>読み込み結果</h3>
-    <ul>
-      ${entries.map(([k, v]) => `<li>${k}: ${v}</li>`).join("")}
-      <li>学科別: ${byDept}</li>
-      <li>科目区分別: ${byCat}</li>
-      <li>教員区分別: ${byKind}</li>
-      <li>前年度データ: ${summary.has_previous_year ? "あり" : "なし"}</li>
-    </ul>`;
+    <div class="panel">
+      <h3>読み込み結果</h3>
+      <div class="stat-row">
+        ${stats.map(([label, value]) => `
+          <div class="stat">
+            <span class="stat-value">${value}</span>
+            <span class="stat-label">${escapeHtml(label)}</span>
+          </div>`).join("")}
+      </div>
+      <dl class="breakdown">
+        ${breakdown.map(([label, body]) =>
+          `<dt>${escapeHtml(label)}</dt><dd>${body}</dd>`).join("")}
+      </dl>
+    </div>`;
 }
 
 function renderWarnings(warnings) {
   const container = document.getElementById("upload-warnings");
   if (!warnings.length) {
-    container.innerHTML = "<p>警告はありません。</p>";
+    container.innerHTML = '<p class="hint">警告はありません。</p>';
     return;
   }
   container.innerHTML = `
-    <h3>警告 ${warnings.length} 件</h3>
-    <ul>${warnings.map((w) => `<li>[${escapeHtml(w.kind)}] ${escapeHtml(w.message)}</li>`).join("")}</ul>`;
+    <div class="panel">
+      <h3>警告 <span class="count warn">${warnings.length}</span></h3>
+      <ul>${warnings.map((w) =>
+        `<li>[${escapeHtml(w.kind)}] ${escapeHtml(w.message)}</li>`).join("")}</ul>
+    </div>`;
 }
 
 async function submitFiles() {
