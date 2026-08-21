@@ -45,17 +45,27 @@ def response(**code_to_labels):
     })
 
 
-def test_chunk_codes_groups_by_department_and_term():
+def test_chunk_codes_groups_by_department():
     subjects = [
-        make("A1", department=Department.MANAGEMENT, term=Term.SPRING),
-        make("A2", department=Department.MANAGEMENT, term=Term.SPRING),
-        make("A3", department=Department.MANAGEMENT, term=Term.FALL),
-        make("A4", department=Department.ACCOUNTING, term=Term.SPRING),
+        make("A1", department=Department.MANAGEMENT),
+        make("A2", department=Department.MANAGEMENT),
+        make("A4", department=Department.ACCOUNTING),
     ]
     ctx = Context.from_lists(subjects, [])
     chunks = chunk_codes(ctx, [s.code for s in subjects])
-    assert len(chunks) == 3
+    assert len(chunks) == 2
     assert sorted(chunks[0][1]) == ["A1", "A2"]
+
+
+def test_chunk_codes_keeps_both_terms_in_one_request():
+    """H12 の対応科目が別リクエストに分かれると、前期を先に置いた時点で
+    後期の行き先が 1 コマに固定され、そこが埋まっていれば置けなくなる。"""
+    subjects = [
+        make("S1", term=Term.SPRING),
+        make("F1", term=Term.FALL),
+    ]
+    ctx = Context.from_lists(subjects, [])
+    assert chunk_codes(ctx, ["S1", "F1"]) == [("経営1年", ["S1", "F1"])]
 
 
 def test_chunk_codes_splits_by_year():
@@ -80,7 +90,7 @@ def test_chunk_codes_keeps_different_courses_together():
         make("S2", category=Category.ELECTIVE_REQUIRED, courses=["経営コース"]),
     ]
     ctx = Context.from_lists(subjects, [])
-    assert chunk_codes(ctx, ["S1", "S2"]) == [("経営1年・前期", ["S1", "S2"])]
+    assert chunk_codes(ctx, ["S1", "S2"]) == [("経営1年", ["S1", "S2"])]
 
 
 def test_placer_places_valid_response(tmp_path):
@@ -194,7 +204,27 @@ def test_placer_ignores_codes_not_in_the_request(tmp_path):
 
 
 def test_chunk_codes_on_real_data_fits_the_free_tier(real_context, real_gemini_codes):
-    """実データのチャンク数。無料枠は 1 モデルあたり 1 日 20 リクエスト。"""
+    """実データのチャンク数。無料枠は 1 モデルあたり 1 日 20 リクエスト。
+
+    実際のリクエスト数はこの 3 倍ではない。必修・選択必修・選択の段階
+    ごとに割るため、段階分けを含めた実測は 23 リクエストである。
+    """
     chunks = chunk_codes(real_context, real_gemini_codes)
-    assert len(chunks) == 20
+    assert len(chunks) == 10
     assert sum(len(codes) for _, codes in chunks) == len(real_gemini_codes)
+
+
+def test_every_term_pair_lands_in_one_chunk_on_real_data(real_context, real_gemini_codes):
+    """対応科目が別リクエストに分かれていないこと。"""
+    chunk_of = {
+        code: label
+        for label, codes in chunk_codes(real_context, real_gemini_codes)
+        for code in codes
+    }
+    groups: dict[str, set[str]] = {}
+    for code in real_gemini_codes:
+        pair_id = real_context.subjects[code].pair_id
+        if pair_id:
+            groups.setdefault(pair_id, set()).add(chunk_of[code])
+    assert groups, "実データに前後期ペアが 1 組も無い"
+    assert [pair_id for pair_id, labels in groups.items() if len(labels) > 1] == []

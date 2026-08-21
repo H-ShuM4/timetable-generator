@@ -6,6 +6,7 @@ import pytest
 from app.constraints.context import Context
 from app.ingest.curriculum_reader import read_curriculum
 from app.ingest.joint_pairing import assign_joint_ids
+from app.ingest.pair_linking import assign_pair_ids
 from app.ingest.teacher_reader import read_teachers
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -15,8 +16,11 @@ TEACHERS_XLSX = _ROOT / "教員一覧(整形済み).xlsx"
 
 @pytest.fixture(scope="session")
 def real_context() -> Context:
+    # run_pipeline と同じ順に前処理する。片方だけ呼ぶと joint_id や
+    # pair_id が付かず、テストが本番と違う条件で走ってしまう。
     subjects = read_curriculum(CURRICULUM_XLSX)
     assign_joint_ids(subjects)
+    assign_pair_ids(subjects)
     return Context.from_lists(subjects, read_teachers(TEACHERS_XLSX))
 
 

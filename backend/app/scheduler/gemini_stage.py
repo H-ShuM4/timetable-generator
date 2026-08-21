@@ -15,7 +15,7 @@ from app.models.timetable import AssignmentSource, Timetable
 
 
 def chunk_codes(context: Context, codes: list[str]) -> list[tuple[str, list[str]]]:
-    """学科 × 年次 × 開講期でチャンクに割る。
+    """学科 × 年次でチャンクに割る。
 
     年次を鍵に含めるのは、H2 と H3 が「学科 × 年次」で衝突を判定する
     ためである。年次で切ると各チャンクが互いに衝突しうる科目だけの塊に
@@ -23,24 +23,35 @@ def chunk_codes(context: Context, codes: list[str]) -> list[tuple[str, list[str]
 
     **コースを鍵に含めない。** H2・H3 はコースを見ないので、コースで
     細分しても衝突の判定範囲は変わらず、リクエスト数だけが増える。
-    実データではコースを鍵から外すことでチャンクが 54 個から 20 個へ
-    減った。Gemini の無料枠は 1 モデルあたり 1 日 20 リクエストなので、
-    この差が「1 回の生成が完走できるかどうか」を分ける。
 
-    併合してもプロンプトは最大 6,429 文字（併合前 4,708 文字）にしか
-    ならず、モデルの入力上限に対して十分小さい。
+    **開講期も鍵に含めない。** H12 は前期と後期の対応科目に同一コマを
+    要求するが、制約は置いたあとにしか効かない。学期で切ると対応する
+    2 科目が必ず別のリクエストになり、前期を先に置いた時点で後期の
+    行き先が 1 コマに固定される。そこが後期の別の必修で埋まっていれば
+    後期は置けない。ソルバーには先読みを入れたが、Gemini が置いた分は
+    そこを通らないため、同じ罠が最適化モードだけに残っていた。実データ
+    では前後期ペア 95 組が 95 組とも別チャンクに分かれていた。
+
+    同じチャンクに入れれば、Gemini は両方の候補を見比べて共通のコマを
+    選べる。守らなければ H12 で差し戻され、違反内容が次の試行に渡る。
+
+    リクエスト数（段階分けを含む実測）は、コース鍵ありで 70、コース鍵
+    なしで 46、開講期も外して 23 になる。無料枠は 1 モデルあたり 1 日
+    20 リクエストなので、この差が「1 回の生成が完走できるかどうか」を
+    分ける。プロンプトは最大 5,387 文字で、モデルの入力上限に対して
+    十分小さい。
     """
     groups: dict[tuple, list[str]] = defaultdict(list)
     for code in codes:
         subject = context.subjects.get(code)
         if subject is None:
             continue
-        key = (subject.department.value, subject.year, subject.term.value)
+        key = (subject.department.value, subject.year)
         groups[key].append(code)
 
     return [
-        (f"{department}{year}年・{term}", group_codes)
-        for (department, year, term), group_codes in groups.items()
+        (f"{department}{year}年", group_codes)
+        for (department, year), group_codes in groups.items()
     ]
 
 
