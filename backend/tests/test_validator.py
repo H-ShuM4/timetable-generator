@@ -18,8 +18,11 @@ def make(code, **kwargs):
 
 def test_all_rules_covers_every_hard_constraint():
     """規則を足したらここに現れる。番号の抜けや重複にも気づけるようにする。"""
+    # H11 は欠番。1 日の合計コマ数の上限として一度足したが、H7 の
+    # 連続 3 コマ制限が 1 日 4 コマを含むため撤去した。番号は再利用
+    # しない。過去のやり取りで H11 と呼んだものと別物になるため。
     assert sorted(rule.__name__ for rule in ALL_RULES) == sorted(
-        f"check_h{n}" for n in range(1, 13)
+        f"check_h{n}" for n in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12)
     )
 
 

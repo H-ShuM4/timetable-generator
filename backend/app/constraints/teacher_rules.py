@@ -1,4 +1,4 @@
-"""教員に関する制約 H1・H5・H6・H7・H11。
+"""教員に関する制約 H1・H5・H6・H7。
 
 すべて「subject を slots に置いたら違反するか」を返す。timetable 上の
 subject 自身の既存配置は無視する。
@@ -19,18 +19,11 @@ MAX_CONSECUTIVE = 3
 隣接が成立したのは 63 組中 23 組にとどまり、未配置も 15 件に増えた。
 3 に緩めると隣接 55 組・未配置 6 件になる。
 
-1 日の総量は H11（合計 4 コマ）が別に押さえているため、緩めても
-1 人の教員に際限なくコマが積まれることはない。
+1 人の教員にコマが積み上がる心配は要らない。時限は 1〜5 の 5 コマ
+しかないので、1 日 5 コマ持つには全部を取るしかなく、それは 5 コマ
+連続になってこの規則自体に触れる。**連続 3 コマまでという上限が、
+1 日 4 コマまでという上限を自動的に含んでいる。**
 """
-
-MAX_PERIODS_PER_DAY = 4
-"""同一教員が同一日に持ってよい合計コマ数の上限。
-
-MAX_CONSECUTIVE とは別物である。連続の上限は「続けて何コマまでか」、
-こちらは「間が空いていても 1 日で何コマまでか」を決める。
-1・2 限と 4・5 限のように分かれていれば連続は 2 コマだが合計は 4 コマになる。
-"""
-
 
 def check_h1(
     context: Context, timetable: Timetable, subject: Subject, slots: tuple[TimeSlot, ...]
@@ -109,8 +102,10 @@ def check_h6(
 _LAST_LOAD: tuple | None = None
 """直前に計算した _teacher_day_load の結果を 1 件だけ覚えておく。
 
-H7 と H11 は同じ走査を必要とし、片方の直後にもう片方が同じ時間割・
-同じ科目で呼ばれる。2 度走査すると実データで生成時間がほぼ倍になった。
+候補コマの列挙は 1 つの科目について何十通りものコマを試すが、この
+走査結果はコマに依存しない。1 件覚えておくだけで同じ科目の 2 回目
+以降がすべて再利用になり、実データでの生成時間が 80 秒から 59 秒に
+縮んだ。
 
 正しさは (timetable が同一オブジェクトか, その version, 教員名,
 除外する科目コード) の一致で担保する。配置が変われば version が
@@ -197,37 +192,4 @@ def check_h7(
     return violations
 
 
-def check_h11(
-    context: Context, timetable: Timetable, subject: Subject, slots: tuple[TimeSlot, ...]
-) -> list[Violation]:
-    """同一教員が同一日に 5 コマ以上持たない。
-
-    H7 と同じくクオーター区間ごとに数える。学期全体の科目と後①の科目と
-    後②の科目が同じ日にあっても、後期前半に実際に立つのは学期全体＋後①
-    の分だけであり、3 つ全部を足すのは誤りである。
-    """
-    violations: list[Violation] = []
-    windows = active_quarters(subject.term, subject.quarter)
-    load = _teacher_day_load(context, timetable, subject)
-
-    for day in sorted({slot.day for slot in slots}):
-        candidate = {slot.period for slot in slots if slot.day == day}
-        existing = load.get(day, ())
-        for window in sorted(windows, key=lambda q: q.value):
-            occupied = {p for p, ws in existing if window in ws}
-            occupied |= candidate
-            if len(occupied) > MAX_PERIODS_PER_DAY:
-                violations.append(Violation(
-                    rule_id="H11",
-                    subject_code=subject.code,
-                    message=(
-                        f"{subject.teacher} の {day}曜日が "
-                        f"{len(occupied)} コマになり、1 日 "
-                        f"{MAX_PERIODS_PER_DAY} コマの上限を超えます"
-                    ),
-                ))
-                break
-    return violations
-
-
-TEACHER_RULES = (check_h1, check_h5, check_h6, check_h7, check_h11)
+TEACHER_RULES = (check_h1, check_h5, check_h6, check_h7)

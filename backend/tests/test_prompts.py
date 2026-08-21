@@ -144,8 +144,8 @@ def test_prompt_asks_for_periods_one_to_four():
     assert "できるだけ 1〜4 限に置いてください" in text
 
 
-def test_prompt_states_the_daily_period_cap():
-    assert "5 コマ以上持たない" in _prompt_for(make("A1"))
+def test_prompt_states_the_consecutive_limit():
+    assert "4 コマ以上連続しないように" in _prompt_for(make("A1"))
 
 
 def test_candidates_are_listed_in_preference_order():
