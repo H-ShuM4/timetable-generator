@@ -115,3 +115,6 @@ table.timetable td.dragover { background: #eff6ff; }
 #dev-settings summary { cursor: pointer; color: var(--muted); }
 #dev-settings > * { margin-top: 0.5rem; }
 #fallback-models label { display: block; min-width: 0; }
+
+.unplaced-card { cursor: grab; }
+.unplaced-card:hover { background: var(--dragover, #eef); }

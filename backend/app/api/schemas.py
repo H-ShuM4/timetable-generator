@@ -26,6 +26,13 @@ class UploadResponse(BaseModel):
     warnings: list[WarningOut]
 
 
+class SessionRef(BaseModel):
+    session_id: str
+    created_at: str
+    files: dict[str, str]
+    has_result: bool
+
+
 class SettingsOut(BaseModel):
     model: str
     max_retries: int
@@ -84,6 +91,9 @@ class SubjectRef(BaseModel):
     year: int
     term: str
     category: str
+    slots_required: int = 1
+    requires_consecutive: bool = False
+    """未配置科目を画面から置くとき、必要なコマ数を組み立てるのに使う。"""
 
 
 class ResultOut(BaseModel):

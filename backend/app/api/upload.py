@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
-from app.api.schemas import UploadResponse, UploadSummary, WarningOut
+from app.api.schemas import SessionRef, UploadResponse, UploadSummary, WarningOut
 from app.ingest.curriculum_reader import read_curriculum_rows
 from app.ingest.joint_pairing import assign_joint_ids
 from app.ingest.pair_linking import assign_pair_ids
@@ -60,10 +60,14 @@ async def upload(
     previous_teachers: UploadFile | None = File(None),
 ) -> UploadResponse:
     logger = SessionLogger("upload")
+    # 復元用にどのファイルを読んだかを控える。セッションは再起動や
+    # ブラウザの再読み込みで消えるため、Excel を保存して読み直せるようにする。
+    saved: dict[str, tuple] = {}
     try:
         curriculum_path = _read_or_400(
             FILE_LABELS["curriculum"], lambda: _persist(curriculum)
         )
+        saved["curriculum"] = (curriculum_path, curriculum.filename or "")
         subjects = _read_or_400(
             FILE_LABELS["curriculum"],
             lambda: read_curriculum_with_fallback(curriculum_path, logger),
@@ -72,21 +76,32 @@ async def upload(
             FILE_LABELS["curriculum"],
             lambda: check_partial_slots(read_curriculum_rows(curriculum_path)),
         )
+        teachers_path = _read_or_400(
+            FILE_LABELS["teachers"], lambda: _persist(teachers)
+        )
+        saved["teachers"] = (teachers_path, teachers.filename or "")
         teacher_map = _read_or_400(
-            FILE_LABELS["teachers"],
-            lambda: read_teachers(_persist(teachers)),
+            FILE_LABELS["teachers"], lambda: read_teachers(teachers_path)
         )
         previous_entries = {}
         if previous_curriculum is not None:
+            previous_path = _read_or_400(
+                FILE_LABELS["previous_curriculum"], lambda: _persist(previous_curriculum)
+            )
+            saved["previous_curriculum"] = (previous_path, previous_curriculum.filename or "")
             previous_entries = _read_or_400(
                 FILE_LABELS["previous_curriculum"],
-                lambda: read_previous_timetable(_persist(previous_curriculum)),
+                lambda: read_previous_timetable(previous_path),
             )
         previous_teacher_map = {}
         if previous_teachers is not None:
+            previous_teachers_path = _read_or_400(
+                FILE_LABELS["previous_teachers"], lambda: _persist(previous_teachers)
+            )
+            saved["previous_teachers"] = (previous_teachers_path, previous_teachers.filename or "")
             previous_teacher_map = _read_or_400(
                 FILE_LABELS["previous_teachers"],
-                lambda: read_teachers(_persist(previous_teachers)),
+                lambda: read_teachers(previous_teachers_path),
             )
     finally:
         logger.close()
@@ -102,24 +117,46 @@ async def upload(
         previous_entries=previous_entries,
         previous_teachers=previous_teacher_map,
     )
-    session_id = store.create(data)
+    session_id = store.create(data, saved)
 
-    summary = UploadSummary(
-        subject_count=len(subjects),
-        teacher_count=len(teacher_map),
-        intensive_count=sum(1 for s in subjects if s.is_intensive),
-        quarter_count=sum(1 for s in subjects if s.quarter is not None),
+    return _describe_session(session_id, data)
+
+
+def build_summary(data: SessionData) -> UploadSummary:
+    return UploadSummary(
+        subject_count=len(data.subjects),
+        teacher_count=len(data.teachers),
+        intensive_count=sum(1 for s in data.subjects if s.is_intensive),
+        quarter_count=sum(1 for s in data.subjects if s.quarter is not None),
         by_department=dict(
-            collections.Counter(s.department.value for s in subjects)
+            collections.Counter(s.department.value for s in data.subjects)
         ),
-        by_category=dict(collections.Counter(s.category.value for s in subjects)),
+        by_category=dict(collections.Counter(s.category.value for s in data.subjects)),
         by_teacher_kind=dict(
-            collections.Counter(t.kind.value for t in teacher_map.values())
+            collections.Counter(t.kind.value for t in data.teachers.values())
         ),
-        has_previous_year=bool(previous_entries),
+        has_previous_year=bool(data.previous_entries),
     )
+
+
+def _describe_session(session_id: str, data: SessionData) -> UploadResponse:
     return UploadResponse(
         session_id=session_id,
-        summary=summary,
-        warnings=[WarningOut(**dataclasses.asdict(w)) for w in warnings],
+        summary=build_summary(data),
+        warnings=[WarningOut(**dataclasses.asdict(w)) for w in data.warnings],
     )
+
+
+@router.get("/sessions", response_model=list[SessionRef])
+async def list_sessions() -> list[SessionRef]:
+    """保存されているセッションの一覧。新しい順。"""
+    return [SessionRef(**row) for row in store.list_sessions()]
+
+
+@router.get("/sessions/{session_id}", response_model=UploadResponse)
+async def get_session(session_id: str) -> UploadResponse:
+    """保存した Excel を読み直してセッションを復元し、読み込みサマリを返す。"""
+    data = store.get(session_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="セッションが見つかりません")
+    return _describe_session(session_id, data)

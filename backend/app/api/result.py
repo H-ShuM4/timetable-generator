@@ -45,6 +45,8 @@ def _to_subject_refs(codes: list[str], context) -> list[SubjectRef]:
             year=subject.year,
             term=subject.term.value,
             category=subject.category.value,
+            slots_required=subject.slots_required,
+            requires_consecutive=subject.requires_consecutive,
         ))
     return refs
 

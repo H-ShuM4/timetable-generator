@@ -156,3 +156,39 @@ def test_a_joint_move_blocked_for_the_partner_moves_nothing():
     assert placements["A1"]["slots"] == ["月1"], "拒否されたら元の位置のまま"
     assert placements["B1"]["slots"] == ["月1"]
     assert placements["A1"]["source"] == "solver", "source も元のまま"
+
+
+def test_an_unplaced_subject_can_be_placed_by_hand():
+    """未配置科目を画面からドラッグで置けるようにするため、移動 API は
+    まだ置かれていない科目コードも受け付ける。"""
+    from app.session_store import store
+
+    session_id = _prepare()
+    data = store.get(session_id)
+    # A2 をいったん外し、未配置として扱う
+    data.result.timetable.remove("A2")
+    data.result.unplaced = ["A2"]
+
+    body = client.post(
+        f"/api/result/{session_id}/move", json={"code": "A2", "slots": ["木4"]}
+    ).json()
+    assert body["applied"] is True
+    assert [str(s) for s in data.result.timetable.slot_of("A2")] == ["木4"]
+
+
+def test_placing_an_unplaced_subject_still_respects_constraints():
+    from app.session_store import store
+
+    session_id = _prepare()
+    data = store.get(session_id)
+    occupied = data.result.timetable.slot_of("A1")
+    data.result.timetable.remove("A2")
+    data.result.unplaced = ["A2"]
+
+    label = f"{occupied[0].day}{occupied[0].period}"
+    body = client.post(
+        f"/api/result/{session_id}/move", json={"code": "A2", "slots": [label]}
+    ).json()
+    assert body["applied"] is False
+    assert [v["rule_id"] for v in body["violations"]] == ["H2"]
+    assert not data.result.timetable.slot_of("A2")

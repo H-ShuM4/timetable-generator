@@ -39,6 +39,12 @@ const api = {
   deleteApiKey() {
     return request("/api/settings/api-key", { method: "DELETE" });
   },
+  listSessions() {
+    return request("/api/sessions");
+  },
+  getSession(sessionId) {
+    return request(`/api/sessions/${sessionId}`);
+  },
   getRetarget(sessionId) {
     return request(`/api/retarget/${sessionId}`);
   },

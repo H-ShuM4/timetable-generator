@@ -116,8 +116,13 @@ function describeSubjectRef(subject) {
 }
 
 function renderSide() {
+  // 未配置科目もドラッグで置けるようにする。置く手段が画面に無いと、
+  // 制約の都合で自動配置できなかった科目に事務局が手出しできない。
   document.getElementById("unplaced-list").innerHTML =
-    resultData.unplaced.map((s) => `<li>${describeSubjectRef(s)}</li>`).join("") || "<li>なし</li>";
+    resultData.unplaced
+      .map((s) => `<li class="unplaced-card" draggable="true" data-code="${escapeHtml(s.code)}">`
+        + `${describeSubjectRef(s)}</li>`)
+      .join("") || "<li>なし</li>";
   document.getElementById("intensive-list").innerHTML =
     resultData.intensive.map((s) => `<li>${describeSubjectRef(s)}</li>`).join("") || "<li>なし</li>";
   document.getElementById("violation-list").innerHTML =
@@ -133,6 +138,13 @@ function attachDragHandlers() {
         code: card.dataset.code,
         grabbed: card.dataset.grabbed,
       }));
+    });
+  });
+
+  document.querySelectorAll(".unplaced-card").forEach((item) => {
+    item.addEventListener("dragstart", (event) => {
+      // grabbed が無いものを未配置として扱う
+      event.dataTransfer.setData("text/plain", JSON.stringify({ code: item.dataset.code }));
     });
   });
 
@@ -165,12 +177,29 @@ function shiftedSlots(placement, grabbedLabel, targetLabel) {
   });
 }
 
+function slotsFromScratch(subject, targetLabel) {
+  // 未配置科目には掴んだ位置が無いので、必要コマ数から組み立てる。
+  // ▲科目は同一日の連続 2 コマ（H10）なので、落とした位置を先頭にする。
+  const target = parseSlot(targetLabel);
+  const count = subject.slots_required || 1;
+  const slots = [];
+  for (let offset = 0; offset < count; offset += 1) {
+    const period = target.period + offset;
+    if (period > 5) return null;
+    slots.push(`${target.day}${period}`);
+  }
+  return slots;
+}
+
 async function moveCard(code, grabbedLabel, targetLabel) {
   const placement = resultData.placements.find((p) => p.code === code);
-  if (!placement) return;
+  const unplaced = resultData.unplaced.find((s) => s.code === code);
+  if (!placement && !unplaced) return;
 
-  const slots = shiftedSlots(placement, grabbedLabel, targetLabel);
-  if (slots.some((slot) => slot === null)) {
+  const slots = placement
+    ? shiftedSlots(placement, grabbedLabel, targetLabel)
+    : slotsFromScratch(unplaced, targetLabel);
+  if (slots === null || slots.some((slot) => slot === null)) {
     window.alert("移動先が時間割の範囲外です");
     return;
   }

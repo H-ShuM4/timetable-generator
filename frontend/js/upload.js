@@ -98,15 +98,56 @@ async function submitFiles() {
 
   try {
     const body = await api.uploadFiles(formData);
-    window.appState.sessionId = body.session_id;
-    renderSummary(body.summary);
-    renderWarnings(body.warnings);
-    document.querySelector('#tabs button[data-view="generate"]').disabled = false;
+    adoptSession(body);
   } catch (error) {
     document.getElementById("upload-summary").innerHTML =
       `<p class="log-ERROR">読み込みに失敗しました: ${escapeHtml(error.message)}</p>`;
   } finally {
     button.disabled = false;
+  }
+}
+
+const SESSION_KEY = "timetable.sessionId";
+
+function adoptSession(body, restored) {
+  // サーバ側はアップロードした Excel を保存しており、同じ読み込み処理を
+  // 通し直して復元できる。ID を localStorage に置いておけば、ブラウザの
+  // 再読み込みやサーバの再起動をまたいで続きから作業できる。
+  window.appState.sessionId = body.session_id;
+  try {
+    window.localStorage.setItem(SESSION_KEY, body.session_id);
+  } catch (error) {
+    // プライベートモードなどで保存できなくても動作は続ける
+  }
+  renderSummary(body.summary);
+  renderWarnings(body.warnings);
+  document.querySelector('#tabs button[data-view="generate"]').disabled = false;
+  if (restored) {
+    const note = document.createElement("p");
+    note.className = "hint";
+    note.textContent = `前回読み込んだデータを復元しました（セッション ${body.session_id}）。`
+      + "別の Excel を読み込めば新しいセッションになります。";
+    document.getElementById("upload-summary").prepend(note);
+  }
+}
+
+async function restoreSession() {
+  let saved = null;
+  try {
+    saved = window.localStorage.getItem(SESSION_KEY);
+  } catch (error) {
+    return;
+  }
+  if (!saved) return;
+  try {
+    adoptSession(await api.getSession(saved), true);
+  } catch (error) {
+    // 保存期間を過ぎて消えたセッション。次回から探さない
+    try {
+      window.localStorage.removeItem(SESSION_KEY);
+    } catch (ignored) {
+      // 消せなくても実害はない
+    }
   }
 }
 
@@ -129,4 +170,5 @@ function initUpload() {
   });
   input.addEventListener("change", () => addFiles(input.files));
   document.getElementById("upload-button").addEventListener("click", submitFiles);
+  restoreSession();
 }
