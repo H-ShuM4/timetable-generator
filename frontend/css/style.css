@@ -24,21 +24,23 @@
   --surface: #ffffff;
   --rule: #dbe1e9;
   --rule-soft: #eceff4;
-  --grid-line: #c2ccd8;
+  --grid-line: #aab7c6;
   --vermilion: #c0392b;
   --vermilion-wash: #fdeceb;
   --amber: #a4690f;
 
   /* 年次は順序のあるデータなので、色相ではなく藍の濃淡で表す */
   --year-1: #eef2f7;
-  --year-2: #c2d5e8;
-  --year-3: #7ba3cb;
-  --year-4: #2f5f92;
+  --year-2: #d2e0ed;
+  --year-3: #b0c8de;
+  --year-4: #8fb2d0;
 
-  /* 配置元。墨＝動かせない、藍＝AI、淡藍＝ソルバー、山吹＝人、灰＝去年のまま */
+  /* 配置元。墨＝動かせない、緑＝機械が決めた、山吹＝人が触った、灰＝去年のまま。
+     年次チップが藍系なので、レールは藍から離して緑系統にする。同系色だと
+     チップとレールの境目が読み取りにくい。 */
   --src-prelock: #15202b;
-  --src-gemini: #1f4e79;
-  --src-solver: #7b96b4;
+  --src-gemini: #1f7a4d;
+  --src-solver: #7cb69a;
   --src-manual: #a4690f;
   --src-inherited: #939aa4;
 
@@ -114,12 +116,13 @@ header h1 {
   position: relative;
   border: 0;
   background: none;
-  padding: 0.5rem 0.875rem 0.625rem;
+  padding: 0.5rem 1rem 0.5625rem;
   font: inherit;
   font-size: 0.875rem;
   color: var(--ink-soft);
   cursor: pointer;
-  border-bottom: 2px solid transparent;
+  border-radius: var(--radius) var(--radius) 0 0;
+  border-bottom: 3px solid transparent;
 }
 
 #tabs button .step {
@@ -130,9 +133,11 @@ header h1 {
 }
 
 #tabs button:hover:not(:disabled) { color: var(--indigo); }
+/* いま どこにいるか が一目で分かるように、下線だけでなく地色も変える */
 #tabs button.active {
   color: var(--indigo-deep);
   font-weight: 700;
+  background: var(--indigo-wash);
   border-bottom-color: var(--indigo);
 }
 #tabs button.active .step { color: var(--indigo); }
@@ -241,10 +246,17 @@ input:focus, select:focus { border-color: var(--indigo-dim); }
   align-items: start;
 }
 
+.result-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+.result-toolbar #export-button { margin-left: auto; flex: none; }
+
 #result-tabs {
   display: flex;
   gap: 1.5rem;
-  margin-bottom: 0.75rem;
   flex-wrap: wrap;
 }
 #result-tabs .group { display: flex; gap: 0.25rem; }
@@ -398,7 +410,7 @@ table.timetable td.dragover { background: var(--indigo-wash); box-shadow: inset 
 .card-year.y1 { border: 1px solid var(--year-2); padding: 0 0.1875rem; }
 .card-year.y2 { background: var(--year-2); }
 .card-year.y3 { background: var(--year-3); }
-.card-year.y4 { background: var(--year-4); color: #fff; }
+.card-year.y4 { background: var(--year-4); }
 
 .card-name { grid-area: name; font-weight: 700; }
 .card-meta { grid-area: meta; color: var(--ink-soft); font-size: 0.6875rem; }

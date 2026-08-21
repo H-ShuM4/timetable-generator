@@ -58,11 +58,13 @@
 
     <section id="view-result" class="view">
       <h2>生成結果</h2>
-      <div id="result-tabs"></div>
+      <div class="result-toolbar">
+        <div id="result-tabs"></div>
+        <button id="export-button" class="primary">Excel として出力</button>
+      </div>
       <div class="result-layout">
         <div class="grid-wrap"><div id="timetable-grid"></div></div>
         <aside id="result-side">
-          <button id="export-button" class="primary">Excel として出力</button>
           <details class="side-block" id="block-violations" open>
             <summary>制約違反 <span class="count" id="count-violations">0</span></summary>
             <ul id="violation-list"></ul>
