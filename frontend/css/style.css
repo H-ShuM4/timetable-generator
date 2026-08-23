@@ -554,17 +554,28 @@ table.timetable td.dragover { background: var(--indigo-wash); box-shadow: inset 
 }
 .stat-label { font-size: 0.75rem; color: var(--ink-soft); letter-spacing: 0.06em; }
 
-.breakdown { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1.25rem; }
-.breakdown dt { font-size: 0.75rem; color: var(--ink-soft); letter-spacing: 0.04em; }
-.breakdown dd { margin: 0; display: flex; flex-wrap: wrap; gap: 0.375rem; }
+.breakdown { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.75rem 1.5rem; }
+.breakdown dt {
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+  letter-spacing: 0.04em;
+  align-self: center;
+}
+.breakdown dd { margin: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .tally {
-  font-size: 0.75rem;
-  padding: 0.0625rem 0.4375rem;
+  font-size: 0.875rem;
+  padding: 0.1875rem 0.6875rem;
   border-radius: 999px;
   background: var(--paper);
   border: 1px solid var(--rule-soft);
 }
-.tally b { font-family: var(--font-data); font-weight: 600; color: var(--indigo-deep); }
+.tally b {
+  font-family: var(--font-data);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--indigo-deep);
+  margin-left: 0.125rem;
+}
 
 /* ---------------------------------------------------------------- 教員別 */
 
@@ -611,11 +622,11 @@ table.timetable td.dragover { background: var(--indigo-wash); box-shadow: inset 
 
 /* 曜日ごとの担当数。空いている日を淡くして、偏りが形で分かるようにする。 */
 .day-load {
-  font-size: 0.75rem;
-  padding: 0.0625rem 0.5rem;
+  font-size: 0.875rem;
+  padding: 0.1875rem 0.625rem;
   border-radius: 999px;
   background: var(--indigo-wash);
   color: var(--indigo-deep);
 }
-.day-load b { font-family: var(--font-data); margin-left: 0.25rem; }
+.day-load b { font-family: var(--font-data); font-size: 0.9375rem; margin-left: 0.25rem; }
 .day-load.empty { background: var(--paper); color: var(--ink-faint); }
