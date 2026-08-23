@@ -37,7 +37,7 @@ async function onEnterGenerateView() {
 
 const MODE_LABELS = {
   mock: "モック",
-  optimize: "最適化",
+  optimize: "AI",
   inherit: "踏襲",
 };
 

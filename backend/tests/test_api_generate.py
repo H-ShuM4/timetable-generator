@@ -88,3 +88,14 @@ def test_export_returns_xlsx(monkeypatch):
 def test_export_before_generation_returns_409(monkeypatch):
     session_id = _upload_small(monkeypatch)
     assert client.get(f"/api/export/{session_id}").status_code == 409
+
+
+def test_the_mode_identifiers_stay_stable_when_labels_change():
+    """画面の呼び名（AI モード）と API の識別子（optimize）は別物。
+
+    識別子は API・設定・保存データを跨ぐので、表示名を変えても動かさない。
+    """
+    from app.scheduler.pipeline import GenerationMode
+
+    assert [m.value for m in GenerationMode] == ["mock", "optimize", "inherit"]
+    assert GenerationMode.OPTIMIZE.label == "AI モード"

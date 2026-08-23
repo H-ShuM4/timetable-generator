@@ -32,6 +32,19 @@ class GenerationMode(str, Enum):
     OPTIMIZE = "optimize"
     INHERIT = "inherit"
 
+    @property
+    def label(self) -> str:
+        """画面に出している呼び名。ログもこれで書く。
+
+        識別子は API と設定を跨いで使うので変えない。事務局が読むのは
+        画面とログなので、その 2 つの呼び名だけを揃える。
+        """
+        return {
+            "mock": "モックモード",
+            "optimize": "AI モード",
+            "inherit": "踏襲モード",
+        }[self.value]
+
 
 class GeminiPlacer(Protocol):
     def __call__(
@@ -62,7 +75,7 @@ def run_pipeline(
     gemini_placer: GeminiPlacer | None = None,
     inherit_plan: "InheritPlan | None" = None,
 ) -> GenerationResult:
-    logger.info(f"生成を開始します（モード: {mode.value}）", stage="Stage 0")
+    logger.info(f"生成を開始します（{mode.label}）", stage="Stage 0")
 
     joint_mismatches = link_subjects(subjects)
     context = Context.from_lists(subjects, teachers)
