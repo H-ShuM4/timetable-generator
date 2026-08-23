@@ -542,7 +542,9 @@ table.timetable td.dragover { background: var(--indigo-wash); box-shadow: inset 
   margin-bottom: 1rem;
   border-bottom: 1px solid var(--rule-soft);
 }
-.stat { display: flex; flex-direction: column; }
+/* 数字とラベルは幅が揃わない（658 と 科目、45 と 集中講義）。
+   左揃えだと端がばらつくので、タイルの中で中央に寄せる。 */
+.stat { display: flex; flex-direction: column; align-items: center; text-align: center; }
 .stat-value {
   font-family: var(--font-data);
   font-size: 1.75rem;
