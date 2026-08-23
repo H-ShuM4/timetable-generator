@@ -620,13 +620,22 @@ table.timetable td.dragover { background: var(--indigo-wash); box-shadow: inset 
 }
 .teacher-load { display: flex; flex-wrap: wrap; gap: 0.375rem; align-items: center; }
 
-/* 曜日ごとの担当数。空いている日を淡くして、偏りが形で分かるようにする。 */
+/* 曜日ごとの担当数。授業のある日と無い日が一目で分かることが目的なので、
+   両側から差を広げる。地色が --indigo-wash と --paper では 1.03:1 しか
+   違わず、並べても見分けが付かなかった。
+   授業のある日 … 濃いめの地色を敷いた「札」
+   授業の無い日 … 地色を外して文字も落とし、背景に沈める */
 .day-load {
   font-size: 0.875rem;
   padding: 0.1875rem 0.625rem;
   border-radius: 999px;
-  background: var(--indigo-wash);
+  background: #d6e4f2;
   color: var(--indigo-deep);
+  font-weight: 700;
 }
 .day-load b { font-family: var(--font-data); font-size: 0.9375rem; margin-left: 0.25rem; }
-.day-load.empty { background: var(--paper); color: var(--ink-faint); }
+.day-load.empty {
+  background: none;
+  color: #97a1ad;
+  font-weight: 400;
+}
