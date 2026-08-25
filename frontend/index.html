@@ -121,22 +121,21 @@
         <input type="number" id="max-retries" min="1" max="10">
       </div>
       <details id="dev-settings">
-        <summary>開発者向け：予備モデル</summary>
-        <p class="hint">AI モードは、1 回の生成で Gemini に何度も問い合わせます。</p>
+        <summary>開発者向け ： 予備モデル</summary>
+        <p class="hint">AI モードでは、1 回の生成で Gemini に何度もリクエストが送られます。</p>
         <dl class="quota">
           <dt>1 モデルで使える回数</dt>
-          <dd>1 日 20 回（無料枠）</dd>
+          <dd>1 日 20 回 （無料枠）</dd>
           <dt>1 回の生成で使う回数</dt>
           <dd>23 回、やり直しが入ると最大 69 回</dd>
         </dl>
         <p class="hint">
-          つまり 1 モデルだけでは、AI モードが途中で止まることがあります。<br>
-          ここで予備のモデルを選んでおくと、上のモデルの回数を使い切った時点で
-          次のモデルへ自動で切り替わり、生成を続けられます。
+          そのため 1 モデルのみでは、利用制限により生成が途切れる場合があります。<br>
+          あらかじめ予備のモデルを設定しておけば、メインのモデルを使い切っても自動で切り替わり、そのまま生成を継続できます。
         </p>
         <p class="notice">
           実務では何も選ばないでください。<br>
-          <span>選択なしなら、上で選んだモデルだけを使う通常の動作になります。</span>
+          <span>選択しなければ、メインのモデルだけを使う通常の動作になります。</span>
         </p>
         <div id="fallback-models"></div>
         <div class="field">
