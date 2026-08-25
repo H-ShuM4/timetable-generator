@@ -1,5 +1,6 @@
-"""科目固有の制約 H4・H8・H9・H10・H12。"""
+"""科目固有の制約 H4・H8・H9・H10・H12・H13。"""
 from app.constraints.context import Context, Violation
+from app.ingest.department_rules import RULES
 from app.models.subject import Subject
 from app.models.timeslot import TimeSlot
 from app.models.timetable import Timetable
@@ -165,4 +166,52 @@ def check_h12(
     return violations
 
 
-SUBJECT_RULES = (check_h4, check_h8, check_h9, check_h10, check_h12)
+def morning_study_yields_to_availability(context: Context, subject: Subject) -> bool:
+    """出勤可能コマがすべて朝学習に重なるか。
+
+    非常勤の出勤可能コマ（H5）と朝学習（H13）がぶつかったときは、
+    **出勤可能コマを優先する**。朝学習は時間帯の運用、出勤可能コマは
+    その先生が来られるかどうかで、後者は動かしようがない。
+
+    実例：リサーチ入門:会 の担当は金 1 限しか出勤できない非常勤で、
+    その金 1 が朝学習になった。朝学習を通すとこの科目は置き場所を失う。
+
+    列挙ではなく条件で書いているのは、事務局が教員一覧を更新するたびに
+    同じ組み合わせが新しく生まれうるためである。
+    """
+    teacher = context.teachers.get(subject.teacher)
+    if teacher is None or not teacher.available_slots:
+        return False
+    return all(
+        RULES.morning_study_blocks(subject, slot) for slot in teacher.available_slots
+    )
+
+
+def check_h13(
+    context: Context, timetable: Timetable, subject: Subject, slots: tuple[TimeSlot, ...]
+) -> list[Violation]:
+    """朝学習の時間には授業を置かない。
+
+    会計学科 1 年は月・火・木・金の 1 限が朝学習にあてられている。
+    水曜だけは朝学習が無く、1 限から 4 限まで事務局が編成を決めている。
+
+    対象は `config/department_rules.json` に書く。他の学科・学年に
+    同じ運用が現れたら、コードを触らずに足せる。
+
+    担当教員の出勤可能コマがすべて朝学習に重なる場合は、この規則が譲る
+    （`morning_study_yields_to_availability` 参照）。
+    """
+    if morning_study_yields_to_availability(context, subject):
+        return []
+    return [
+        Violation(
+            rule_id="H13",
+            subject_code=subject.code,
+            message=f"{slot} は朝学習の時間です",
+        )
+        for slot in slots
+        if RULES.morning_study_blocks(subject, slot)
+    ]
+
+
+SUBJECT_RULES = (check_h4, check_h8, check_h9, check_h10, check_h12, check_h13)

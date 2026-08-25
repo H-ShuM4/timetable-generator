@@ -130,3 +130,27 @@ def test_remote_column_distinguishes_maru_batsu_and_blank():
     # 大学 ○76 + 短大 ○13 = 89、× は全て大学の 420、空欄は短大のみ。
     # 空欄が行数 153 でなく 149 なのは ▲科目 4 件が 2 行から 1 件へ集約されるため
     assert (len(yes), len(no), len(blank)) == (89, 420, 149)
+
+
+def test_the_accounting_wednesday_is_fixed_from_the_department_rules():
+    """事務局が決めた水曜の編成。Excel には書かれていない。"""
+    subjects = {s.code: s for s in read_curriculum(CURRICULUM_XLSX)}
+    expected = {
+        "商業簿記Ⅰ": 1, "商業簿記Ⅱ": 1,
+        "商業簿記演習Ⅰ": 2, "商業簿記演習Ⅱ": 2,
+        "工業簿記Ⅰ": 3, "工業簿記Ⅱ": 3,
+        "工業簿記演習Ⅰ": 4, "工業簿記演習Ⅱ": 4,
+    }
+    same_name = [s for s in subjects.values() if s.base_name in expected and s.year == 1]
+    fixed = [s for s in same_name if s.department is Department.ACCOUNTING]
+    # 8 科目名 × 通常と【再】の 2 クラス
+    assert len(fixed) == 16
+    for subject in fixed:
+        assert subject.fixed_slot is not None, subject.code
+        slot = subject.fixed_slot[0]
+        assert (slot.day, slot.period) == ("水", expected[subject.base_name]), subject.code
+
+    # 経営 1 年と短大 1 年にも同名の科目がある。規則は会計 1 年だけに効く
+    others = [s for s in same_name if s.department is not Department.ACCOUNTING]
+    assert others, "他学科に同名の科目が無いと、この絞り込みを検証できない"
+    assert all(s.fixed_slot is None for s in others), [s.code for s in others]

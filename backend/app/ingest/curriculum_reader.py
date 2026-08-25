@@ -9,6 +9,7 @@ from pathlib import Path
 
 import openpyxl
 
+from app.ingest.department_rules import RULES
 from app.ingest.name_normalizer import normalize_name
 from app.models.enums import Category, Department, Quarter, Term
 from app.models.subject import Subject
@@ -126,6 +127,25 @@ def read_curriculum_rows(path: str | Path) -> list[dict]:
     return rows_out
 
 
+def _fixed_slot(from_excel, department, year, base_name, slots_required):
+    """Excel の指定を優先し、無ければ学科ごとの編成規則を見る。
+
+    会計学科 1 年の水曜のように、Excel には書かれていないが事務局が
+    編成を決めている枠がある。Excel と同じ `fixed_slot` として扱えば、
+    Stage 1 の確定配置と H9 がそのまま効く。
+    """
+    if from_excel is not None:
+        return from_excel
+    if slots_required != 1:
+        return None
+    probe = Subject(
+        code="", name=base_name, base_name=base_name, department=department,
+        year=year, term=Term.SPRING, quarter=None, category=Category.REQUIRED,
+    )
+    slot = RULES.fixed_slot_for(probe)
+    return (slot,) if slot else None
+
+
 def read_curriculum(path: str | Path) -> list[Subject]:
     """全シートを読み、Subject のリストを返す。"""
     overrides = _load_json("subject_overrides.json", {})
@@ -174,13 +194,16 @@ def read_curriculum(path: str | Path) -> list[Subject]:
         slots_required = 2 if is_double else 1
         requires_consecutive = is_double and base_name not in non_consecutive
 
+        department = Department(str(_cell(row, columns, "学科")).strip())
+        year = int(str(_cell(row, columns, "年次配当")).strip())
+
         subjects.append(
             Subject(
                 code=code,
                 name=name,
                 base_name=base_name,
-                department=Department(str(_cell(row, columns, "学科")).strip()),
-                year=int(str(_cell(row, columns, "年次配当")).strip()),
+                department=department,
+                year=year,
                 term=Term(str(_cell(row, columns, "開講期間")).strip()),
                 quarter=_parse_quarter(_cell(row, columns, "備考")),
                 category=Category(str(_cell(row, columns, "科目区分")).strip()),
@@ -191,7 +214,10 @@ def read_curriculum(path: str | Path) -> list[Subject]:
                 is_joint=str(_cell(row, columns, "合同(経・会)") or "").strip() == "○",
                 slots_required=slots_required,
                 requires_consecutive=requires_consecutive,
-                fixed_slot=tuple(slots) if len(slots) == slots_required else None,
+                fixed_slot=_fixed_slot(
+                    tuple(slots) if len(slots) == slots_required else None,
+                    department, year, base_name, slots_required,
+                ),
                 is_intensive=intensive,
             )
         )

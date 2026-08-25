@@ -5,6 +5,7 @@ Excel を直すか、そのまま進めるかを判断する。
 """
 from dataclasses import dataclass
 
+from app.ingest.department_rules import RULES
 from app.models.enums import Category, TeacherKind
 from app.models.subject import Subject
 from app.models.teacher import Teacher
@@ -30,6 +31,24 @@ def collect_warnings(
 
     for subject in subjects:
         teacher = teachers.get(subject.teacher)
+
+        # 朝学習の時間に授業が入ることになる科目は、黙って通さず知らせる。
+        # 制約としては正しく譲っているが、事務局にとっては例外扱いである。
+        if (
+            teacher is not None
+            and teacher.available_slots
+            and all(RULES.morning_study_blocks(subject, slot)
+                    for slot in teacher.available_slots)
+        ):
+            warnings.append(Warning(
+                kind="morning_study_exception",
+                message=(
+                    f"出勤可能コマが朝学習と重なるため、朝学習の時間に配置します: "
+                    f"{subject.name}（{subject.teacher}）"
+                ),
+                subject_code=subject.code,
+                teacher_name=subject.teacher,
+            ))
 
         if teacher is None:
             if subject.teacher not in seen_unknown:

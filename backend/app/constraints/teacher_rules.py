@@ -5,6 +5,7 @@ subject 自身の既存配置は無視する。
 """
 from app.constraints.context import Context, Violation, others_at
 from app.constraints.period_overlap import active_quarters
+from app.ingest.department_rules import RULES
 from app.models.enums import TeacherKind
 from app.models.subject import Subject
 from app.models.timeslot import TimeSlot
@@ -144,6 +145,11 @@ def _teacher_day_load(
             continue
         windows = active_quarters(other.term, other.quarter)
         for slot in assignment.slots:
+            # 事務局が編成を決めた枠は連続の数に入れない。会計学科 1 年の
+            # 水曜は 1〜4 限が簿記で埋まると決まっており、担当教員はその
+            # 4 コマが必ず連続する。同じ教員の他の授業は通常どおり数える。
+            if RULES.exempt_from_consecutive_limit(other, slot):
+                continue
             load.setdefault(slot.day, []).append((slot.period, windows))
     _LAST_LOAD = (timetable, timetable.version, subject.teacher, subject.code, load)
     return load
@@ -174,7 +180,10 @@ def check_h7(
     load = _teacher_day_load(context, timetable, subject)
 
     for day in sorted({slot.day for slot in slots}):
-        candidate = {slot.period for slot in slots if slot.day == day}
+        candidate = {
+            slot.period for slot in slots
+            if slot.day == day and not RULES.exempt_from_consecutive_limit(subject, slot)
+        }
         existing = load.get(day, ())
         for window in sorted(windows, key=lambda q: q.value):
             occupied = {p for p, ws in existing if window in ws}
