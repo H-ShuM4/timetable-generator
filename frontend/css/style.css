@@ -685,7 +685,20 @@ table.timetable td.dragover { background: var(--indigo-wash); box-shadow: inset 
   .param { grid-template-columns: 1fr; }
 }
 
-/* 説明文は行が長いと読めない。画面が広くても 1 行の幅を抑える。 */
+/* 説明文は行が長いと読めない。画面が広くても 1 行の幅を抑える。
+ *
+ * 日本語は語の切れ目が空白で示されないため、ブラウザは既定では文字単位で
+ * 折り返す。「必ずしも全 / て反映される」のように語の途中で切れて読みにくい。
+ *   auto-phrase … 文節の切れ目で折り返す（Chrome・Edge 119 以降）
+ *   line-break: strict … 行頭に来てはいけない文字の規則を厳しくする
+ *   text-wrap: pretty  … 最終行が 1 語だけ残るのを避ける
+ * 対応していないブラウザは無視するだけで、従来どおり表示される。
+ */
+.hint, .notice, .param label, .quota {
+  word-break: auto-phrase;
+  line-break: strict;
+  text-wrap: pretty;
+}
 .hint, .notice { max-width: 44rem; }
 
 .quota {
