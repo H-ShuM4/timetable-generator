@@ -23,6 +23,29 @@ class LogEvent:
         return asdict(self)
 
 
+MAX_LOG_FILES = 50
+"""残しておくログファイルの数。古いものから消す。
+
+不具合の原因を追うのに要るのは直近の数回で、それ以前は溜まるだけ。
+実際 380 ファイル・1.2MB まで増えていた。
+"""
+
+
+def prune_logs(directory: Path, keep: int = MAX_LOG_FILES) -> None:
+    """新しい順に keep 件を残し、それより古いものを消す。"""
+    try:
+        files = sorted(
+            directory.glob("*.log"), key=lambda path: path.stat().st_mtime, reverse=True
+        )
+    except OSError:
+        return
+    for stale in files[keep:]:
+        try:
+            stale.unlink()
+        except OSError:
+            pass  # 使用中などで消せなくても、ログを書く邪魔はしない
+
+
 class SessionLogger:
     """1 回の生成に対応するロガー。"""
 
@@ -30,6 +53,7 @@ class SessionLogger:
         self.session_id = session_id
         directory = Path(log_dir) if log_dir else DEFAULT_LOG_DIR
         directory.mkdir(parents=True, exist_ok=True)
+        prune_logs(directory)
         stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
         self.log_path = directory / f"{stamp}_{session_id}.log"
 
@@ -37,7 +61,9 @@ class SessionLogger:
         self._subscribers: list[queue.SimpleQueue] = []
         self._lock = threading.Lock()
         self._closed = False
-        self._file = self.log_path.open("a", encoding="utf-8")
+        # 1 行も書かないロガーはファイルを作らない。読み込みと復元は
+        # 問題が無ければ何も書かず、空ファイルだけが残っていた。
+        self._file = None
 
     @property
     def events(self) -> list[LogEvent]:
@@ -83,6 +109,8 @@ class SessionLogger:
             subscribers = list(self._subscribers)
             prefix = f"[{event.timestamp}] {level:<5}"
             suffix = f" ({stage})" if stage else ""
+            if self._file is None:
+                self._file = self.log_path.open("a", encoding="utf-8")
             self._file.write(f"{prefix} {message}{suffix}\n")
             self._file.flush()
         for stream in subscribers:
@@ -105,7 +133,7 @@ class SessionLogger:
             self._closed = True
             subscribers = list(self._subscribers)
             self._subscribers.clear()
-            if not self._file.closed:
+            if self._file is not None and not self._file.closed:
                 self._file.close()
         for stream in subscribers:
             stream.put(None)

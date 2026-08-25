@@ -90,3 +90,55 @@ def test_close_is_idempotent(tmp_path):
 
     assert stream.get(timeout=1) is None
     assert stream.empty()
+
+
+def test_a_logger_that_writes_nothing_leaves_no_file(tmp_path):
+    """読み込みと復元は問題が無ければ何も書かない。空ファイルを残さない。"""
+    logger = SessionLogger("quiet", log_dir=tmp_path)
+    logger.close()
+    assert list(tmp_path.glob("*.log")) == []
+
+
+def test_the_file_appears_once_something_is_written(tmp_path):
+    logger = SessionLogger("noisy", log_dir=tmp_path)
+    logger.info("何かあった")
+    logger.close()
+    assert logger.log_path.exists()
+    assert "何かあった" in logger.log_path.read_text(encoding="utf-8")
+
+
+def test_old_logs_are_deleted(tmp_path):
+    """溜まり続けないこと。実際 380 ファイルまで増えていた。"""
+    import os
+    import time
+
+    from app.logging.session_logger import MAX_LOG_FILES
+
+    for index in range(MAX_LOG_FILES + 12):
+        path = tmp_path / f"old_{index:03d}.log"
+        path.write_text("x", encoding="utf-8")
+        os.utime(path, (time.time() - (100 - index), time.time() - (100 - index)))
+
+    logger = SessionLogger("new", log_dir=tmp_path)
+    logger.info("記録")
+    logger.close()
+
+    remaining = sorted(p.name for p in tmp_path.glob("*.log"))
+    assert len(remaining) == MAX_LOG_FILES + 1  # 残した分と、いま書いた分
+    assert "old_000.log" not in remaining  # 最も古いものは消えている
+    assert logger.log_path.name in remaining
+
+
+def test_pruning_keeps_the_newest(tmp_path):
+    import os
+    import time
+
+    from app.logging.session_logger import prune_logs
+
+    for index in range(5):
+        path = tmp_path / f"log_{index}.log"
+        path.write_text("x", encoding="utf-8")
+        os.utime(path, (time.time() - (10 - index), time.time() - (10 - index)))
+
+    prune_logs(tmp_path, keep=2)
+    assert sorted(p.name for p in tmp_path.glob("*.log")) == ["log_3.log", "log_4.log"]
