@@ -660,29 +660,48 @@ table.timetable td.dragover { background: var(--indigo-wash); box-shadow: inset 
 #params .hint + .hint { margin-top: 0.375rem; }
 #param-list { margin-top: 1rem; }
 
+/* 左に「何をする設定か」、右に操作。説明文が長くなったので、名前と説明を
+   1 つの塊にして左へ寄せ、スライダーと現在値を右端へ揃える。
+   行の幅を止めているのは、画面が広いときに名前と操作が離れすぎないため。 */
+#param-list { max-width: 66rem; }
+
 .param {
   display: grid;
-  grid-template-columns: 15rem 12rem auto;
+  grid-template-columns: minmax(0, 1fr) 12rem 8rem;
+  grid-template-areas:
+    "label slider value"
+    "hint  slider value";
   align-items: center;
-  gap: 0.25rem 1rem;
-  padding: 0.625rem 0;
+  gap: 0.25rem 1.5rem;
+  padding: 0.75rem 0;
   border-top: 1px solid var(--rule-soft);
 }
 .param:first-child { border-top: 0; padding-top: 0; }
 .param:last-child { padding-bottom: 0; }
-.param label { font-size: 0.875rem; }
-.param input[type="range"] { width: 100%; accent-color: var(--indigo); cursor: pointer; }
+.param label { grid-area: label; font-size: 0.875rem; align-self: end; }
+.param input[type="range"] {
+  grid-area: slider;
+  width: 100%;
+  accent-color: var(--indigo);
+  cursor: pointer;
+}
 .param-value {
+  grid-area: value;
   font-size: 0.875rem;
   font-weight: 700;
   color: var(--indigo-deep);
-  min-width: 9rem;
 }
-.param-hint { grid-column: 1 / -1; margin: 0; font-size: 0.8125rem; }
+.param-hint { grid-area: hint; margin: 0; font-size: 0.8125rem; align-self: start; }
 .param-effort { border-top: 2px solid var(--rule); }
 
 @media (max-width: 800px) {
-  .param { grid-template-columns: 1fr; }
+  .param {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "label  label"
+      "slider value"
+      "hint   hint";
+  }
 }
 
 /* 説明文は行が長いと読めない。画面が広くても 1 行の幅を抑える。
