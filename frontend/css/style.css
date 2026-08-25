@@ -699,7 +699,10 @@ table.timetable td.dragover { background: var(--indigo-wash); box-shadow: inset 
   line-break: strict;
   text-wrap: pretty;
 }
-.hint, .notice { max-width: 44rem; }
+/* 画面が広いときは 1 行で読ませる。上限 60rem は「生成の重み付け」の
+   説明（71 文字・約 58rem）が 1 行に収まる幅で、これ以上広げると
+   予備モデルの説明（92 文字）まで 1 行になり、目で行を追えなくなる。 */
+.hint, .notice { max-width: 60rem; }
 
 .quota {
   display: grid;
