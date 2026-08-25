@@ -53,6 +53,12 @@ class ApiKeyIn(BaseModel):
 
 class GenerateIn(BaseModel):
     mode: str = Field(pattern="^(mock|optimize|inherit)$")
+    weights: dict[str, str] = Field(default_factory=dict)
+    """生成画面のスライダー。項目名 → off / normal / high。"""
+
+    repair_effort: str = Field(default="off", pattern="^(off|short|long)$")
+    """配置の見直しにかける時間。"""
+
     retarget_codes: list[str] = Field(default_factory=list)
 
 

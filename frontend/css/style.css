@@ -639,3 +639,39 @@ table.timetable td.dragover { background: var(--indigo-wash); box-shadow: inset 
   color: #97a1ad;
   font-weight: 400;
 }
+
+/* ---------------------------------------------------------------- 重み付け */
+
+#params { margin-bottom: 1rem; }
+#params > summary {
+  cursor: pointer;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--indigo-deep);
+  letter-spacing: 0.03em;
+}
+#params > *:not(summary) { margin-top: 0.75rem; }
+
+.param {
+  display: grid;
+  grid-template-columns: 15rem 12rem auto;
+  align-items: center;
+  gap: 0.25rem 1rem;
+  padding: 0.625rem 0;
+  border-top: 1px solid var(--rule-soft);
+}
+.param:first-child { border-top: 0; }
+.param label { font-size: 0.875rem; }
+.param input[type="range"] { width: 100%; accent-color: var(--indigo); cursor: pointer; }
+.param-value {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--indigo-deep);
+  min-width: 9rem;
+}
+.param-hint { grid-column: 1 / -1; margin: 0; font-size: 0.8125rem; }
+.param-effort { border-top: 2px solid var(--rule); }
+
+@media (max-width: 800px) {
+  .param { grid-template-columns: 1fr; }
+}

@@ -41,6 +41,99 @@ const MODE_LABELS = {
   inherit: "踏襲",
 };
 
+// 生成画面のスライダー。左から順に 0・1・2 で、値は API へ渡す語に直す。
+const WEIGHT_STEPS = ["off", "normal", "high"];
+const WEIGHT_LABELS = ["気にしない", "標準", "重視"];
+const EFFORT_STEPS = ["off", "short", "long"];
+const EFFORT_LABELS = ["しない", "短く（5 秒まで）", "じっくり（1 分まで）"];
+
+const PARAMS = [
+  { key: "student_gaps", label: "学生の空きコマを減らす",
+    hint: "1 限と 4 限だけで間が空く日を詰めます" },
+  { key: "student_days", label: "学生の登校日数を減らす",
+    hint: "週の出校日をまとめます。1 日あたりは長くなります" },
+  { key: "teacher_gaps", label: "教員の空きコマを減らす",
+    hint: "先生の待ち時間を減らします" },
+  { key: "early_periods", label: "1〜4 限に集約する",
+    hint: "教職課程の科目が入る 4・5 限との競合を避けます" },
+  { key: "seminar_adjacency", label: "ゼミを隣り合わせる",
+    hint: "課題研究と卒業研究を隣の時限にし、3 年と 4 年が交流できるようにします" },
+];
+
+const PARAM_KEY = "timetable.params";
+
+function readParams() {
+  try {
+    return JSON.parse(window.localStorage.getItem(PARAM_KEY)) || {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function saveParams(values) {
+  try {
+    window.localStorage.setItem(PARAM_KEY, JSON.stringify(values));
+  } catch (error) {
+    // 保存できなくても生成はできる
+  }
+}
+
+function paramValues() {
+  const values = {};
+  document.querySelectorAll("#param-list input[type=range]").forEach((input) => {
+    values[input.dataset.key] = Number(input.value);
+  });
+  return values;
+}
+
+function renderParams() {
+  const saved = readParams();
+  const rows = PARAMS.map((item) => {
+    const value = Number.isInteger(saved[item.key]) ? saved[item.key] : 1;
+    return `
+      <div class="param">
+        <label for="param-${item.key}">${escapeHtml(item.label)}</label>
+        <input type="range" id="param-${item.key}" data-key="${item.key}"
+               min="0" max="2" step="1" value="${value}">
+        <span class="param-value" data-for="${item.key}">${WEIGHT_LABELS[value]}</span>
+        <p class="hint param-hint">${escapeHtml(item.hint)}</p>
+      </div>`;
+  });
+  const effort = Number.isInteger(saved.repair_effort) ? saved.repair_effort : 0;
+  rows.push(`
+    <div class="param param-effort">
+      <label for="param-repair">見直しにかける時間</label>
+      <input type="range" id="param-repair" data-key="repair_effort"
+             min="0" max="2" step="1" value="${effort}">
+      <span class="param-value" data-for="repair_effort">${EFFORT_LABELS[effort]}</span>
+      <p class="hint param-hint">
+        上の項目を活かすには「短く」以上にしてください。「しない」では配置を見直しません。
+      </p>
+    </div>`);
+  document.getElementById("param-list").innerHTML = rows.join("");
+
+  document.querySelectorAll("#param-list input[type=range]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const key = input.dataset.key;
+      const labels = key === "repair_effort" ? EFFORT_LABELS : WEIGHT_LABELS;
+      document.querySelector(`.param-value[data-for="${key}"]`).textContent =
+        labels[Number(input.value)];
+      saveParams(paramValues());
+    });
+  });
+}
+
+function selectedWeights() {
+  const values = paramValues();
+  const weights = {};
+  PARAMS.forEach((item) => { weights[item.key] = WEIGHT_STEPS[values[item.key] || 0]; });
+  return weights;
+}
+
+function selectedEffort() {
+  return EFFORT_STEPS[paramValues().repair_effort || 0];
+}
+
 function checkedRetargetCodes() {
   return Array.from(
     document.querySelectorAll("#retarget-list input:checked")
@@ -68,7 +161,8 @@ async function startGeneration() {
 
   try {
     const body = await api.startGeneration(
-      sessionId, selectedMode(), checkedRetargetCodes()
+      sessionId, selectedMode(), checkedRetargetCodes(),
+      selectedWeights(), selectedEffort()
     );
     if (body.mode !== selectedMode()) {
       const label = MODE_LABELS[body.mode] || body.mode;
@@ -103,6 +197,7 @@ async function startGeneration() {
 }
 
 function initGenerate() {
+  renderParams();
   document.getElementById("generate-button").addEventListener("click", startGeneration);
   document.querySelectorAll('input[name="mode"]').forEach((input) => {
     input.addEventListener("change", onEnterGenerateView);

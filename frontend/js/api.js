@@ -48,11 +48,16 @@ const api = {
   getRetarget(sessionId) {
     return request(`/api/retarget/${sessionId}`);
   },
-  startGeneration(sessionId, mode, retargetCodes) {
+  startGeneration(sessionId, mode, retargetCodes, weights, repairEffort) {
     return request(`/api/generate/${sessionId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode, retarget_codes: retargetCodes || [] }),
+      body: JSON.stringify({
+        mode,
+        retarget_codes: retargetCodes || [],
+        weights: weights || {},
+        repair_effort: repairEffort || "off",
+      }),
     });
   },
   getResult(sessionId) {

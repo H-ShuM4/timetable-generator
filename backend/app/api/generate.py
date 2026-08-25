@@ -12,6 +12,8 @@ from app.api.schemas import GenerateIn, RetargetItem
 from app.gemini.client import RealGeminiClient, RotatingGeminiClient
 from app.logging.session_logger import SessionLogger
 from app.scheduler.gemini_stage import make_gemini_placer
+from app.scheduler.objectives import Weights
+from app.scheduler.repair import EFFORT_SECONDS
 from app.scheduler.inherit import InheritPlan, detect_retarget_codes
 from app.scheduler.pipeline import GenerationMode, run_pipeline
 from app.session_store import store
@@ -127,6 +129,8 @@ async def start_generation(session_id: str, payload: GenerateIn) -> dict:
             data.result = run_pipeline(
                 data.subjects, data.teachers, mode, logger,
                 gemini_placer=placer, inherit_plan=inherit_plan,
+                weights=Weights.from_steps(payload.weights),
+                repair_seconds=EFFORT_SECONDS.get(payload.repair_effort, 0.0),
             )
             store.save_result(session_id)
         except Exception as error:  # 生成を止めず、必ずログに残す

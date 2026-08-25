@@ -17,7 +17,9 @@ from app.models.subject import Subject
 from app.models.teacher import Teacher
 from app.models.timetable import Timetable
 from app.scheduler.inherit import InheritPlan, apply_plan
+from app.scheduler.objectives import Weights
 from app.scheduler.prelock import prelock
+from app.scheduler.repair import repair
 from app.scheduler.solver import solve
 
 STAGE_ORDER: tuple[tuple[str, Category], ...] = (
@@ -74,6 +76,8 @@ def run_pipeline(
     *,
     gemini_placer: GeminiPlacer | None = None,
     inherit_plan: "InheritPlan | None" = None,
+    weights: Weights | None = None,
+    repair_seconds: float = 0.0,
 ) -> GenerationResult:
     logger.info(f"生成を開始します（{mode.label}）", stage="Stage 0")
 
@@ -122,6 +126,10 @@ def run_pipeline(
     unplaced = solve(context, timetable, pending)
     for code in unplaced:
         logger.warn(f"配置できませんでした: {code}", stage="Stage 5")
+
+    if repair_seconds > 0 and weights is not None and not weights.is_idle:
+        logger.info("配置を見直します", stage="Stage 5.5")
+        repair(context, timetable, weights, seconds=repair_seconds, logger=logger)
 
     violations = validate_all(context, timetable)
     level = logger.error if violations else logger.info

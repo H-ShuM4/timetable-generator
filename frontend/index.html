@@ -46,6 +46,16 @@
         <label><input type="radio" name="mode" value="optimize"> AI モード</label>
         <label><input type="radio" name="mode" value="inherit"> 踏襲モード</label>
       </div>
+      <details id="params" class="panel">
+        <summary>生成の重み付け</summary>
+        <p class="hint">
+          いずれも「できればそうしたい」という好みで、決まりを破ってまで
+          優先することはありません。すべて「気にしない」にすると、
+          配置の見直しを行わず従来どおりの結果になります。
+        </p>
+        <div id="param-list"></div>
+      </details>
+
       <div id="retarget-panel" hidden>
         <h3>組み替え対象</h3>
         <div id="retarget-list"></div>
