@@ -58,6 +58,12 @@ class SessionLogger:
             self._subscribers.append(stream)
         return stream
 
+    def unsubscribe(self, stream) -> None:
+        """購読をやめる。画面を閉じた購読者へ書き続けないため。"""
+        with self._lock:
+            if stream in self._subscribers:
+                self._subscribers.remove(stream)
+
     def log(self, level: str, message: str, *, stage: str | None = None) -> None:
         """イベントを記録する。閉じた後の呼び出しは何もしない。
 

@@ -3,8 +3,10 @@ import pytest
 
 from app.gemini.client import (
     GeminiError,
+    ModelBusyError,
     QuotaExceededError,
     RotatingGeminiClient,
+    is_busy_error,
     is_quota_error,
 )
 
@@ -66,7 +68,8 @@ def test_an_exhausted_model_is_never_used_again():
 def test_switch_callback_reports_the_exhausted_and_next_model():
     factory, _ = make_factory(m1=1)
     switches = []
-    client = RotatingGeminiClient(factory, ["m1", "m2"], on_switch=lambda a, b: switches.append((a, b)))
+    client = RotatingGeminiClient(
+        factory, ["m1", "m2"], on_switch=lambda a, b, error: switches.append((a, b)))
     client.generate("p")
     assert switches == [("m1", "m2")]
 
@@ -143,7 +146,7 @@ def test_placer_finishes_a_chunk_after_switching_models(tmp_path):
             return json.dumps({"placements": [{"code": "A1", "slots": ["月1"]}]})
 
     switches = []
-    client = RotatingGeminiClient(Model, ["m1", "m2"], on_switch=lambda a, b: switches.append(a))
+    client = RotatingGeminiClient(Model, ["m1", "m2"], on_switch=lambda a, b, error: switches.append(a))
     logger = SessionLogger("rotation", log_dir=tmp_path)
     timetable = Timetable()
 
@@ -152,3 +155,42 @@ def test_placer_finishes_a_chunk_after_switching_models(tmp_path):
     assert switches == ["m1"]
     # どのモデルが処理したかログに残る
     assert any("m2" in line for line in logger.log_path.read_text(encoding="utf-8").splitlines())
+
+
+def test_a_busy_model_hands_over_to_the_next_one():
+    """503 は枠切れではないが、同じモデルに送り直しても混雑は解けない。
+
+    実測では 1 回の呼び出しに 2 分 25 秒かかったうえで 503 が返り、
+    そのまま同じモデルへ再送していた。
+    """
+    def factory(model):
+        # 混んでいるのは m1 だけ。m2 は普通に応じる
+        return FakeClient(model, failures=1 if model == "m1" else 0,
+                          error=ModelBusyError("503 UNAVAILABLE"))
+
+    reasons = []
+    client = RotatingGeminiClient(
+        factory, ["m1", "m2"], on_switch=lambda a, b, error: reasons.append(type(error)))
+    assert client.generate("p") == "m2:p"
+    assert reasons == [ModelBusyError]
+    assert client.current_model == "m2"
+
+
+@pytest.mark.parametrize("message", [
+    "503 UNAVAILABLE",
+    "This model is currently experiencing high demand.",
+    "The model is overloaded. Please try again later.",
+])
+def test_is_busy_error_recognises_a_crowded_model(message):
+    assert is_busy_error(Exception(message))
+
+
+def test_is_busy_error_ignores_a_quota_message():
+    assert not is_busy_error(Exception("429 RESOURCE_EXHAUSTED"))
+
+
+def test_a_request_cannot_hang_forever():
+    """待ち時間に上限を置く。混雑したモデルを何分も待たない。"""
+    from app.gemini.client import REQUEST_TIMEOUT_SECONDS
+
+    assert 0 < REQUEST_TIMEOUT_SECONDS <= 120

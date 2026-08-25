@@ -20,17 +20,51 @@ class QuotaExceededError(GeminiError):
     """
 
 
+class ModelBusyError(GeminiError):
+    """モデルが混み合っていて応じられない（503）。
+
+    枠切れと違い時間が経てば回復するが、その場で待つには長すぎる。
+    呼び出し側は枠切れと同じく次のモデルへ移る。
+    """
+
+
 QUOTA_MARKERS = ("RESOURCE_EXHAUSTED", "quota", "rate limit")
 """利用枠切れと判断する語。SDK の例外型に依存しないため文字列で見る。"""
+
+BUSY_MARKERS = ("UNAVAILABLE", "high demand", "overloaded")
+"""モデルが混雑していると判断する語。"""
+
+REQUEST_TIMEOUT_SECONDS = 90
+"""1 回の呼び出しを待つ上限。
+
+実測で 503 が返るまで 2 分 25 秒待たされたことがある。混雑している
+モデルを待ち続けるより、切り上げて次のモデルへ移るほうが早い。
+"""
+
+
+def _has_status(error: Exception, code: int) -> bool:
+    return any(getattr(error, name, None) == code for name in ("code", "status_code"))
 
 
 def is_quota_error(error: Exception) -> bool:
     """例外が利用枠切れかどうか。判定を誤ってもソルバーへ落ちるだけで済む。"""
-    for attribute in ("code", "status_code"):
-        if getattr(error, attribute, None) == 429:
-            return True
+    if _has_status(error, 429):
+        return True
     text = str(error).lower()
     return any(marker.lower() in text for marker in QUOTA_MARKERS)
+
+
+def is_busy_error(error: Exception) -> bool:
+    """モデルが混み合っていて応じられない状態か（503）。
+
+    枠切れとは別物だが、対処は同じで「次のモデルへ移る」でよい。同じ
+    モデルに送り直しても、混雑は数秒では解消しない。実際、1 回の呼び出しに
+    2 分 25 秒かかったうえで 503 が返り、そのまま同じモデルへ再送していた。
+    """
+    if _has_status(error, 503):
+        return True
+    text = str(error).lower()
+    return any(marker.lower() in text for marker in BUSY_MARKERS)
 
 
 class GeminiClient(Protocol):
@@ -41,8 +75,14 @@ class GeminiClient(Protocol):
 class RealGeminiClient:
     def __init__(self, api_key: str, model: str) -> None:
         from google import genai
+        from google.genai import types
 
-        self._client = genai.Client(api_key=api_key)
+        # 待ち時間に上限を置く。混雑したモデルを何分も待つより、
+        # 打ち切って次のモデルへ移るほうが速い。
+        self._client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_SECONDS * 1000),
+        )
         self._model = model
 
     def generate(self, prompt: str) -> str:
@@ -58,6 +98,8 @@ class RealGeminiClient:
         except Exception as error:  # SDK の例外型に依存しない
             if is_quota_error(error):
                 raise QuotaExceededError(str(error)) from error
+            if is_busy_error(error):
+                raise ModelBusyError(str(error)) from error
             raise GeminiError(str(error)) from error
 
         text = getattr(response, "text", None)
@@ -111,10 +153,10 @@ class RotatingGeminiClient:
                 client = self._clients[model] = self._make_client(model)
             try:
                 return client.generate(prompt)
-            except QuotaExceededError:
+            except (QuotaExceededError, ModelBusyError) as error:
                 self._index += 1
                 if self._on_switch is not None:
-                    self._on_switch(model, self.current_model)
+                    self._on_switch(model, self.current_model, error)
         raise GeminiError(
             f"指定された全 {len(self._models)} モデルが利用枠に達しました"
             f"（{'、'.join(self._models)}）"

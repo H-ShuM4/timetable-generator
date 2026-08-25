@@ -2,7 +2,9 @@
 
 生成は別スレッドで動かし、ログはロガーの購読キューを通して流す。
 """
+import asyncio
 import json
+import queue
 import threading
 
 from fastapi import APIRouter, HTTPException
@@ -20,6 +22,12 @@ from app.session_store import store
 from app.settings_store import SettingsStore
 
 router = APIRouter(prefix="/api", tags=["generate"])
+
+POLL_SECONDS = 0.2
+"""ログを取りに行く間隔。人が読む速さに対して十分細かい。"""
+
+KEEPALIVE_SECONDS = 15.0
+"""何も起きない間に送るコメント。間に挟まる機器に切られないため。"""
 
 settings_store = SettingsStore()
 
@@ -75,17 +83,15 @@ async def start_generation(session_id: str, payload: GenerateIn) -> dict:
     if mode is not GenerationMode.MOCK:
         models = settings.models_in_order()
 
-        def announce_switch(exhausted: str, next_model: str | None) -> None:
-            if next_model is None:
-                logger.warn(
-                    f"{exhausted} が利用枠に達しました。切り替え先がもうありません",
-                    stage="Gemini",
-                )
-            else:
-                logger.warn(
-                    f"{exhausted} が利用枠に達しました。{next_model} に切り替えます",
-                    stage="Gemini",
-                )
+        def announce_switch(left: str, next_model: str | None, error: Exception) -> None:
+            from app.gemini.client import ModelBusyError
+
+            reason = "混み合っています" if isinstance(error, ModelBusyError) else "利用枠に達しました"
+            destination = (
+                f"{next_model} に切り替えます" if next_model
+                else "切り替え先がもうありません"
+            )
+            logger.warn(f"{left} が{reason}。{destination}", stage="Gemini")
 
         try:
             gemini_client = RotatingGeminiClient(
@@ -152,16 +158,40 @@ async def stream_logs(session_id: str) -> StreamingResponse:
 
     logger = data.logger
     backlog = logger.events
-    queue = logger.subscribe()
+    stream = logger.subscribe()
 
-    def events():
-        for event in backlog:
-            yield f"data: {json.dumps(event.to_dict(), ensure_ascii=False)}\n\n"
-        while True:
-            event = queue.get()
-            if event is None:
-                yield "event: done\ndata: {}\n\n"
-                return
-            yield f"data: {json.dumps(event.to_dict(), ensure_ascii=False)}\n\n"
+    async def events():
+        """ログを流し続ける。**同期のキュー待ちにしてはいけない。**
+
+        以前は `queue.get()` で待っており、待っている間ワーカースレッドを
+        1 本占有した。サーバを止めるときそのスレッドは中断できず、
+        KeyboardInterrupt と CancelledError の長いトレースバックが
+        ターミナルに出ていた。画面を閉じても待ち続けるため、購読者も
+        溜まり続けた。
+
+        待たずに取り出し、無ければ少し眠る。スレッドを 1 本も使わず、
+        中断にも即座に応じられる。
+        """
+        try:
+            for event in backlog:
+                yield f"data: {json.dumps(event.to_dict(), ensure_ascii=False)}\n\n"
+            idle = 0.0
+            while True:
+                try:
+                    event = stream.get_nowait()
+                except queue.Empty:
+                    await asyncio.sleep(POLL_SECONDS)
+                    idle += POLL_SECONDS
+                    if idle >= KEEPALIVE_SECONDS:
+                        idle = 0.0
+                        yield ": keep-alive\n\n"
+                    continue
+                idle = 0.0
+                if event is None:
+                    yield "event: done\ndata: {}\n\n"
+                    return
+                yield f"data: {json.dumps(event.to_dict(), ensure_ascii=False)}\n\n"
+        finally:
+            logger.unsubscribe(stream)
 
     return StreamingResponse(events(), media_type="text/event-stream")
