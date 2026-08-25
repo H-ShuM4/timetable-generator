@@ -8,6 +8,22 @@ from app.ingest.curriculum_reader import read_curriculum
 from app.ingest.pair_linking import link_subjects
 from app.ingest.teacher_reader import read_teachers
 
+@pytest.fixture(autouse=True)
+def isolated_storage(tmp_path_factory, monkeypatch):
+    """テストが実運用のセッションとログに触れないようにする。
+
+    セッションもログも件数の上限を持ち、古いものから消える。テストは
+    1 回で 20 件以上作るため、そのまま走らせると**事務局が保存した
+    時間割とログを追い出してしまう**。実際に AI モードの結果を 1 つ
+    失った。
+    """
+    from app import session_store
+    from app.logging import session_logger
+
+    monkeypatch.setattr(session_store.store, "_dir", tmp_path_factory.mktemp("sessions"))
+    monkeypatch.setattr(session_logger, "DEFAULT_LOG_DIR", tmp_path_factory.mktemp("logs"))
+
+
 _ROOT = Path(__file__).resolve().parents[2]
 CURRICULUM_XLSX = _ROOT / "カリキュラム一覧(整形済み).xlsx"
 TEACHERS_XLSX = _ROOT / "教員一覧(整形済み).xlsx"

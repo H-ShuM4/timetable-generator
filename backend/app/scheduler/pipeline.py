@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Protocol
 
 from app.constraints.context import Context, Violation
+from app.constraints.linking import linked_group
 from app.constraints.validator import validate_all
 from app.ingest.pair_linking import link_subjects
 from app.ingest.validators import Warning, collect_warnings
@@ -68,6 +69,43 @@ class GenerationResult:
     intensive_codes: list[str] = field(default_factory=list)
 
 
+def release_partial_groups(
+    context: Context, timetable: Timetable, pending: list[str]
+) -> list[str]:
+    """一部だけ置かれた「同じコマに入るべき」科目群を、まとめて外す。
+
+    H4（合同）と H12（前後期）は同一コマを要求する。片方が先に置かれると
+    残りはそのコマ以外を選べず、そこが埋まっていれば永久に置けない。
+    ソルバーは自分でグループごと置くとき先読みしてこれを避けるが、
+    **Gemini が片方だけ置いて残りを未確定にした場合は手遅れになる。**
+
+    実際に起きた 2 件：
+      - 合同の経営側を AI が金 1 に置いたが、会計側は朝学習（H13）で
+        金 1 に置けなかった
+      - 日本語リテラシーⅠ・Ⅱ【再】の 4 科目のうち 3 件が月 2 に入り、
+        残る 1 件は後期の月 2 に別の必修があって入れなかった
+
+    そこで置かれているほうを外し、グループ全体をソルバーに委ねる。
+    ソルバーは全員が入れるコマだけを候補にするので、同じ行き違いが起きない。
+    事務局が曜日時限を決めた枠を含むグループは外さない。
+    """
+    released: list[str] = []
+    for code in sorted(set(pending)):
+        subject = context.subjects.get(code)
+        if subject is None:
+            continue
+        group = linked_group(context, subject)
+        placed = [c for c in group if timetable.is_placed(c)]
+        if not placed:
+            continue
+        if any(context.subjects[c].fixed_slot is not None for c in group):
+            continue
+        for member in placed:
+            timetable.remove(member)
+            released.append(member)
+    return sorted(set(released))
+
+
 def run_pipeline(
     subjects: list[Subject],
     teachers: list[Teacher] | dict[str, Teacher],
@@ -120,6 +158,14 @@ def run_pipeline(
             placed = len(codes) - len(failed)
             logger.info(f"{placed} 件を配置、{len(failed)} 件が未確定", stage=stage_name)
             pending = [c for c in pending if not timetable.is_placed(c)]
+
+    released = release_partial_groups(context, timetable, pending)
+    if released:
+        logger.info(
+            f"同じコマに入るべき科目が分かれていたため、{len(released)} 件を置き直します",
+            stage="Stage 5",
+        )
+        pending = sorted(set(pending) | set(released))
 
     if pending:
         logger.info(f"ソルバーで {len(pending)} 件を補完します", stage="Stage 5")
