@@ -49,15 +49,15 @@ const EFFORT_LABELS = ["しない", "短く（5 秒まで）", "じっくり（1
 
 const PARAMS = [
   { key: "student_gaps", label: "学生の空きコマを減らす",
-    hint: "1 限と 4 限だけで間が空く日を詰めます" },
+    hint: "授業間の空き時間を減らし、なるべく連続して授業を受けられるように配置します。" },
   { key: "student_days", label: "学生の登校日数を減らす",
-    hint: "週の出校日をまとめます。1 日あたりは長くなります" },
+    hint: "授業を特定の曜日に集中させ、週の登校日数を減らします（※1日あたりの授業数は増えます）。" },
   { key: "teacher_gaps", label: "教員の空きコマを減らす",
-    hint: "先生の待ち時間を減らします" },
+    hint: "教員の授業と授業の間の空き時間をなるべく減らします。" },
   { key: "early_periods", label: "1〜4 限に集約する",
-    hint: "教職課程の科目が入る 4・5 限との競合を避けます" },
+    hint: "教職課程（4・5限）との衝突を防ぐため、通常科目をなるべく1〜4限に優先配置します。" },
   { key: "seminar_adjacency", label: "ゼミを隣り合わせる",
-    hint: "課題研究と卒業研究を隣の時限にし、3 年と 4 年が交流できるようにします" },
+    hint: "3年生（課題研究）と4年生（卒業研究）が交流できるよう、2つのゼミを連続した時限に配置します。" },
 ];
 
 const PARAM_KEY = "timetable.params";
@@ -107,7 +107,7 @@ function renderParams() {
              min="0" max="2" step="1" value="${effort}">
       <span class="param-value" data-for="repair_effort">${EFFORT_LABELS[effort]}</span>
       <p class="hint param-hint">
-        上の項目を活かすには「短く」以上にしてください。「しない」では配置を見直しません。
+        上記の設定を反映させるには「短く」以上を選択してください。「しない」の場合は設定が適用されません。
       </p>
     </div>`);
   document.getElementById("param-list").innerHTML = rows.join("");
