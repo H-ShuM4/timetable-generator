@@ -189,7 +189,9 @@ button.primary {
 }
 button.primary:hover:not(:disabled) { background: var(--indigo-deep); border-color: var(--indigo-deep); }
 
-.button-row { display: flex; gap: 0.75rem; align-items: center; }
+/* 余白は行に持たせる。ボタン側に margin-top を置くと、中央揃えの行では
+   その分だけ片方が下がり、隣のボタンと段違いに見える。 */
+.button-row { display: flex; gap: 0.75rem; align-items: center; margin-top: 1.5rem; }
 
 /* 以前読み込んだデータの一覧。普段は畳んでおき、読込画面の主役
    （ドラッグ&ドロップ）の邪魔をしない。 */
@@ -244,7 +246,7 @@ input:focus, select:focus { border-color: var(--indigo-dim); }
 
 /* 入力域と実行ボタンの間は広く取る。誤って押す事故を減らす。 */
 #file-assign:not(:empty) { margin-top: 1.25rem; }
-#upload-button, #generate-button { margin-top: 1.5rem; }
+#upload-button { margin-top: 1.5rem; }
 /* モード選択・重み付け・実行ボタンの間隔を同じにする。
    詰まって見える箇所と空きすぎる箇所が混ざると落ち着かない。 */
 #mode-select {
