@@ -62,13 +62,18 @@ async def upload(
         "previous_curriculum": previous_curriculum,
         "previous_teachers": previous_teachers,
     }
+    # 控えた一時ファイルは、複写が済んだら消す。ここで残すと 1 アップロード
+    # につき最大 4 件が積み上がり、事務局 PC で長く使うほど一時領域を食う。
+    # 途中の読み取り失敗で 400 を返す経路でも消えるよう、逐次控えて finally
+    # でまとめて片付ける。
+    saved: dict[str, tuple[Path, str]] = {}
     try:
-        saved = {
-            role: (_read_or_400(FILE_LABELS[role], lambda u=upload: _persist(u)),
-                   upload.filename or "")
-            for role, upload in uploads.items()
-            if upload is not None
-        }
+        for role, uploaded in uploads.items():
+            if uploaded is None:
+                continue
+            path = _read_or_400(FILE_LABELS[role], lambda u=uploaded: _persist(u))
+            saved[role] = (path, uploaded.filename or "")
+
         loaded = load_session_data(
             saved["curriculum"][0],
             saved["teachers"][0],
@@ -77,17 +82,19 @@ async def upload(
             previous_teachers=saved.get("previous_teachers", (None,))[0],
             read=lambda role, action: _read_or_400(FILE_LABELS[role], action),
         )
+
+        data = SessionData(
+            subjects=loaded.subjects,
+            teachers=loaded.teachers,
+            warnings=loaded.warnings,
+            previous_entries=loaded.previous_entries,
+            previous_teachers=loaded.previous_teachers,
+        )
+        session_id = store.create(data, saved)
     finally:
         logger.close()
-
-    data = SessionData(
-        subjects=loaded.subjects,
-        teachers=loaded.teachers,
-        warnings=loaded.warnings,
-        previous_entries=loaded.previous_entries,
-        previous_teachers=loaded.previous_teachers,
-    )
-    session_id = store.create(data, saved)
+        for path, _ in saved.values():
+            path.unlink(missing_ok=True)
 
     return _describe_session(session_id, data)
 

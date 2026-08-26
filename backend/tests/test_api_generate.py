@@ -1,3 +1,4 @@
+import tempfile
 import time
 
 from fastapi.testclient import TestClient
@@ -83,6 +84,17 @@ def test_export_returns_xlsx(monkeypatch):
     response = client.get(f"/api/export/{session_id}")
     assert response.status_code == 200
     assert response.content[:2] == b"PK"  # xlsx は zip 形式
+
+
+def test_export_leaves_no_temporary_directory_behind(monkeypatch, tmp_path):
+    """出力のたびに mkdtemp したままだと、書き出すほどゴミが増える。"""
+    session_id = _upload_small(monkeypatch)
+    client.post(f"/api/generate/{session_id}", json={"mode": "mock"})
+    _wait_for_completion(session_id)
+
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    assert client.get(f"/api/export/{session_id}").status_code == 200
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_export_before_generation_returns_409(monkeypatch):

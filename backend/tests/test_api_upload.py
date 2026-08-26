@@ -1,3 +1,4 @@
+import tempfile
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -134,3 +135,28 @@ def test_upload_accepts_previous_year_files():
         )
     assert response.status_code == 200
     assert response.json()["summary"]["has_previous_year"] is True
+
+
+def test_upload_leaves_no_temporary_files_behind(tmp_path, monkeypatch):
+    """投入された Excel はセッションへ複写した時点で用が済む。
+
+    残しておくと 1 アップロードにつき最大 4 件が溜まり続け、事務局 PC
+    で長く使うほど一時領域を食う。
+    """
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    assert _upload().status_code == 200
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_an_unreadable_file_leaves_no_temporary_files_behind(tmp_path, monkeypatch):
+    """400 を返す経路でも同じ。例外で抜けるときこそ取りこぼしやすい。"""
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    response = client.post(
+        "/api/upload",
+        files={
+            "curriculum": ("c.xlsx", "これは Excel ではない".encode("utf-8"), "application/vnd.ms-excel"),
+            "teachers": ("t.xlsx", "これも Excel ではない".encode("utf-8"), "application/vnd.ms-excel"),
+        },
+    )
+    assert response.status_code == 400
+    assert list(tmp_path.iterdir()) == []
