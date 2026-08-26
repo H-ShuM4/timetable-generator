@@ -1,11 +1,12 @@
-# 開発時にだけ要るもの。
+# 開発時にだけ要るもの。テストランナーとブラウザ一式。
 #
-# requirements.txt は setup.bat が事務局 PC でそのまま展開するため、
-# ブラウザ一式をそちらへ混ぜない。E2E テスト（pytest -m e2e）を走らせる
-# 開発機だけがこのファイルを使う。
+# requirements.txt は setup.bat が事務局 PC でそのまま展開する。事務局は
+# テストを走らせないので、そちらへ混ぜない。開発機だけがこのファイルを使う。
 #
 #   .venv/bin/pip install -r backend/requirements-dev.txt
 #   npx playwright install chromium
 #
+pytest>=8.3
+httpx>=0.28
 playwright>=1.62
 pytest-playwright>=0.9
