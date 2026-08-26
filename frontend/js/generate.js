@@ -182,6 +182,10 @@ async function startGeneration() {
   clearLog();
   openLogPanel();
   setStatus("生成中です…");
+  // ログパネルは画面下端に固定で開くため、そのままだとボタンの列を
+  // 覆ってしまい、中止したくても押せない。生成中に一番使うのは中止なので、
+  // 開けたあとで見える位置へ寄せる。
+  document.getElementById("cancel-button").scrollIntoView({ block: "center" });
 
   try {
     const body = await api.startGeneration(

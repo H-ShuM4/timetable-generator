@@ -40,6 +40,12 @@ function clearLog() {
 function setLogPanelCollapsed(collapsed) {
   document.getElementById("log-panel").classList.toggle("collapsed", collapsed);
   document.getElementById("log-toggle").textContent = collapsed ? "▲" : "▼";
+  // パネルは画面下端に固定で重なるため、開いた分だけ本文の下に余白を
+  // 足す。足さないと一番下のボタンがパネルの裏に入り、押せなくなる。
+  // 実際、生成を始めるとログが「中止する」を覆っていた。
+  if (document.body && document.body.classList) {
+    document.body.classList.toggle("log-open", !collapsed);
+  }
 }
 
 function openLogPanel() {

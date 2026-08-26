@@ -532,6 +532,9 @@ table.timetable td.dragover { background: var(--indigo-wash); box-shadow: inset 
   font-size: 0.75rem;
 }
 #log-body { height: var(--log-height); overflow-y: auto; padding: 0.5rem 0.875rem; }
+/* 開いている間は本文の下に、パネルの高さぶんの余白を足す（body の
+   padding-bottom は畳んだときの見出しぶんしか見ていない）。 */
+body.log-open { padding-bottom: calc(3.5rem + var(--log-height)); }
 #log-panel.collapsed #log-body { display: none; }
 #log-panel .log-INFO { color: #aab6c2; }
 #log-panel .log-WARN { color: #e0a458; }
