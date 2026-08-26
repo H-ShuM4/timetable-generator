@@ -33,6 +33,12 @@
       </div>
       <div id="file-assign"></div>
       <button id="upload-button" class="primary" disabled>読み込む</button>
+      <!-- 読み込んだ Excel と結果はサーバに残っている。localStorage の
+           1 件しか辿れないと、それを消した途端に過去の結果へ手が届かない。 -->
+      <details id="saved-sessions" hidden>
+        <summary>以前読み込んだデータから選ぶ</summary>
+        <ul id="saved-session-list"></ul>
+      </details>
       </div>
       <div id="upload-summary"></div>
       <div id="upload-warnings"></div>

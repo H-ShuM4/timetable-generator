@@ -165,6 +165,49 @@ async function adoptRestoredResult(sessionId) {
   document.getElementById("upload-summary").prepend(note);
 }
 
+function describeSavedSession(row) {
+  // ファイル名は利用者が付ける自由文字列なので、属性値の中も含めて escape する。
+  const when = (row.created_at || "").replace("T", " ") || "日時不明";
+  const names = Object.values(row.files || {});
+  const files = names.length ? names.join("・") : "ファイル名不明";
+  const result = row.has_result ? "（生成結果あり）" : "";
+  return `${escapeHtml(when)} — ${escapeHtml(files)}${result}`;
+}
+
+async function adoptSavedSession(sessionId) {
+  // 復元と同じ経路を通す。タブの有効化も localStorage への記録も
+  // adoptSession が面倒を見るので、ここでは選んだ ID を渡すだけにする。
+  await adoptSession(await api.getSession(sessionId), true);
+}
+
+async function renderSavedSessions() {
+  const panel = document.getElementById("saved-sessions");
+  let rows = [];
+  try {
+    rows = await api.listSessions();
+  } catch (error) {
+    // 一覧が引けなくても、これから読み込む道は塞がない
+  }
+  if (!rows.length) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  document.getElementById("saved-session-list").innerHTML = rows
+    .map((row) => `
+      <li>
+        <button type="button" class="saved-session"
+                data-session="${escapeHtml(row.session_id)}">
+          ${describeSavedSession(row)}
+        </button>
+      </li>`)
+    .join("");
+
+  document.querySelectorAll("#saved-session-list button").forEach((button) => {
+    button.addEventListener("click", () => adoptSavedSession(button.dataset.session));
+  });
+}
+
 async function restoreSession() {
   let saved = null;
   try {
@@ -205,4 +248,5 @@ function initUpload() {
   input.addEventListener("change", () => addFiles(input.files));
   document.getElementById("upload-button").addEventListener("click", submitFiles);
   restoreSession();
+  renderSavedSessions();
 }

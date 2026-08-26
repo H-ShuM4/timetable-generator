@@ -191,6 +191,24 @@ button.primary:hover:not(:disabled) { background: var(--indigo-deep); border-col
 
 .button-row { display: flex; gap: 0.75rem; align-items: center; }
 
+/* 以前読み込んだデータの一覧。普段は畳んでおき、読込画面の主役
+   （ドラッグ&ドロップ）の邪魔をしない。 */
+#saved-sessions { margin-top: 1rem; }
+#saved-sessions > summary {
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+#saved-session-list { list-style: none; margin: 0.5rem 0 0; padding: 0; }
+#saved-session-list li { margin-bottom: 0.25rem; }
+#saved-session-list button {
+  width: 100%;
+  text-align: left;
+  font-size: 0.8125rem;
+  padding: 0.4rem 0.6rem;
+}
+
 input[type="text"], input[type="password"], input[type="number"], input:not([type]), select {
   padding: 0.375rem 0.5rem;
   border: 1px solid var(--rule);

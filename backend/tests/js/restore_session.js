@@ -11,7 +11,7 @@ const path = require("path");
 
 const UPLOAD_JS = path.join(__dirname, "..", "..", "..", "frontend", "js", "upload.js");
 
-const { createDocument } = require("./dom_stub.js");
+const { createDocument, element: stubElement } = require("./dom_stub.js");
 
 function element(id) {
   return {
@@ -103,11 +103,79 @@ function summaryMarkup() {
   };
 }
 
+// 保存済みセッションの一覧。localStorage を消しても、別のブラウザからでも
+// サーバに残っている読み込み済みデータへ戻れることを確かめる。
+function savedSessions(rows) {
+  const tabs = { generate: element("tab-generate"), result: element("tab-result") };
+  tabs.generate.disabled = true;
+  tabs.result.disabled = true;
+  const document = createDocument({
+    matchers: {
+      'data-view="result"': tabs.result,
+      'data-view="generate"': tabs.generate,
+    },
+  });
+  const saved = {};
+  const sandbox = {
+    console, document,
+    window: {
+      appState: { sessionId: null },
+      localStorage: {
+        getItem: (key) => (key in saved ? saved[key] : null),
+        setItem: (key, value) => { saved[key] = value; },
+        removeItem: (key) => { delete saved[key]; },
+      },
+    },
+    api: {
+      listSessions: async () => rows,
+      getSession: async (id) => ({
+        session_id: id,
+        summary: {
+          subject_count: 658, teacher_count: 99, intensive_count: 0,
+          quarter_count: 0, by_department: {}, by_category: {},
+          by_teacher_kind: {}, has_previous_year: false,
+        },
+        warnings: [],
+      }),
+      getResult: async () => ({ status: "done" }),
+    },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "..", "..",
+    "frontend", "js", "logviewer.js"), "utf8"), sandbox);
+  vm.runInContext(fs.readFileSync(UPLOAD_JS, "utf8"), sandbox);
+
+  return sandbox.renderSavedSessions()
+    .then(() => (rows.length ? sandbox.adoptSavedSession("chosen-id") : null))
+    .then(() => ({
+      markup: (document.nodes["saved-session-list"] || {}).innerHTML || "",
+      panel_hidden: document.nodes["saved-sessions"].hidden === true,
+      adopted: sandbox.window.appState.sessionId,
+      remembered: saved["timetable.sessionId"] || null,
+      result_tab_enabled: !tabs.result.disabled,
+    }));
+}
+
 (async () => {
   console.log(JSON.stringify({
     with_result: await run("done", "abc123"),
     without_result: await run("pending", "abc123"),
     nothing_saved: await run("done", null),
     summary: summaryMarkup(),
+    saved_sessions: await savedSessions([
+      {
+        session_id: "chosen-id",
+        created_at: "2026-08-20T10:30:00",
+        files: { curriculum: '<img src=x onerror=alert(1)>.xlsx', teachers: "教員.xlsx" },
+        has_result: true,
+      },
+      {
+        session_id: "older-id",
+        created_at: "2026-08-19T09:00:00",
+        files: { curriculum: "去年.xlsx" },
+        has_result: false,
+      },
+    ]),
+    no_saved_sessions: await savedSessions([]),
   }));
 })();

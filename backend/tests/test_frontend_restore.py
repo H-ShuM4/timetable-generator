@@ -55,3 +55,29 @@ def test_a_warning_shows_its_message_without_the_internal_kind(run_js):
     text = run_js("restore_session.js")["summary"]["warning_text"]
     assert text == "出勤可能日が空欄です"
     assert "[" not in text
+
+
+def test_saved_sessions_can_be_picked_from_the_load_screen(run_js):
+    """localStorage を消しても、サーバに残っているデータへ戻れること。
+
+    一覧を返す API は最初から在ったが、画面から呼ぶ経路が無く、
+    別のブラウザや別の PC からは過去の結果に手が届かなかった。
+    """
+    row = run_js("restore_session.js")["saved_sessions"]
+    assert row["panel_hidden"] is False
+    assert "chosen-id" in row["markup"]
+    assert "older-id" in row["markup"]
+    assert row["adopted"] == "chosen-id"
+    assert row["remembered"] == "chosen-id"
+    assert row["result_tab_enabled"] is True
+
+
+def test_a_file_name_from_excel_cannot_inject_markup(run_js):
+    """ファイル名は利用者が付ける自由文字列。属性値の中も含めて escape する。"""
+    markup = run_js("restore_session.js")["saved_sessions"]["markup"]
+    assert "<img" not in markup
+    assert "&lt;img" in markup
+
+
+def test_the_saved_session_panel_hides_itself_when_there_is_nothing_to_show(run_js):
+    assert run_js("restore_session.js")["no_saved_sessions"]["panel_hidden"] is True
