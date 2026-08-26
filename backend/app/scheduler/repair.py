@@ -109,16 +109,26 @@ def _place_all(timetable: Timetable, placed: dict[str, Assignment]) -> None:
 
 
 def _try_at(
-    context: Context, timetable: Timetable, group: list[str], slots: tuple[TimeSlot, ...]
+    context: Context,
+    timetable: Timetable,
+    group: list[str],
+    slots: tuple[TimeSlot, ...],
+    sources: dict[str, AssignmentSource],
 ) -> bool:
-    """グループ全員を slots へ置けたら True。置けなければ何も変えない。"""
+    """グループ全員を slots へ置けたら True。置けなければ何も変えない。
+
+    **置き直しても source は元のままにする。** 画面のレール色は
+    「そのコマを誰が決めたか」を表す唯一の手掛かりで、修復は配置を
+    見直すだけで決めた主体を変えるわけではない。ソルバー扱いに
+    書き換えると、事前ロックした非常勤の枠が solver の色で現れる。
+    """
     if not all(
         not check_placement(context, timetable, context.subjects[code], slots)
         for code in group
     ):
         return False
     for code in group:
-        timetable.place(code, slots, AssignmentSource.SOLVER)
+        timetable.place(code, slots, sources.get(code, AssignmentSource.SOLVER))
     return True
 
 
@@ -133,6 +143,14 @@ def _movable_groups(context: Context, timetable: Timetable) -> list[list[str]]:
         seen.update(group)
         # 事務局が曜日時限を決めた枠は動かさない
         if any(context.subjects[c].fixed_slot is not None for c in group):
+            continue
+        # 踏襲した枠も動かさない。踏襲モードは「前年度と同じコマにロック
+        # する」と決めてあり、修復がそれを崩すと事務局が確認しなくてよい
+        # はずの科目まで去年と違う場所に現れる。
+        if any(
+            timetable.assignments[c].source is AssignmentSource.INHERITED
+            for c in group
+        ):
             continue
         groups.append(group)
     return groups
@@ -167,6 +185,7 @@ def repair(
             if not placed:
                 continue
             original = next(iter(placed.values())).slots
+            sources = {code: assignment.source for code, assignment in placed.items()}
             base = index.score(context, timetable, keys, group, weights)
 
             for code in placed:
@@ -174,7 +193,9 @@ def repair(
 
             best_slots, best_score = original, base
             for slots in candidate_slot_sets(context.subjects[group[0]]):
-                if slots == original or not _try_at(context, timetable, group, slots):
+                if slots == original or not _try_at(
+                    context, timetable, group, slots, sources
+                ):
                     continue
                 score = index.score(context, timetable, keys, group, weights)
                 for code in group:
@@ -182,7 +203,9 @@ def repair(
                 if score < best_score:
                     best_slots, best_score = slots, score
 
-            if best_slots != original and _try_at(context, timetable, group, best_slots):
+            if best_slots != original and _try_at(
+                context, timetable, group, best_slots, sources
+            ):
                 improved, moves = True, moves + 1
             else:
                 _place_all(timetable, placed)

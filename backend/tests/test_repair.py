@@ -96,3 +96,34 @@ def test_the_time_limit_is_honoured():
 @pytest.mark.parametrize("effort,seconds", [("off", 0.0), ("short", 5.0), ("long", 60.0)])
 def test_the_effort_steps_map_to_seconds(effort, seconds):
     assert EFFORT_SECONDS[effort] == seconds
+
+
+def test_repair_keeps_the_source_that_placed_a_subject():
+    """動かしても「誰が決めたコマか」は変わらない。
+
+    画面のレール色は配置元を表す唯一の手掛かりなので、修復が
+    ソルバー扱いに書き換えると事務局には嘘が見える。
+    """
+    ctx = build([make("A1", teacher="教員甲")])
+    tt = Timetable()
+    tt.place("A1", (TimeSlot("月", 5),), AssignmentSource.PRELOCK)
+
+    repair(ctx, tt, Weights(early_periods=1.0), seconds=5)
+
+    assert tt.slot_of("A1") != (TimeSlot("月", 5),), "5 限から動くはずの場面"
+    assert tt.assignments["A1"].source is AssignmentSource.PRELOCK
+
+
+def test_an_inherited_placement_is_left_where_last_year_put_it():
+    """踏襲モードは前年度のコマに**ロックする**と決めてある。
+
+    修復が黙って動かすと、事務局が確認しなくてよいはずの科目まで
+    去年と違う場所に現れる。
+    """
+    ctx = build([make("A1", teacher="教員甲")])
+    tt = Timetable()
+    tt.place("A1", (TimeSlot("月", 5),), AssignmentSource.INHERITED)
+
+    repair(ctx, tt, Weights(early_periods=1.0), seconds=5)
+
+    assert tt.slot_of("A1") == (TimeSlot("月", 5),)
