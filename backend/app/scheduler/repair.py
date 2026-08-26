@@ -17,6 +17,7 @@ import time
 
 from app.constraints.context import Context
 from app.constraints.linking import linked_group
+from app.constraints.period_overlap import active_quarters
 from app.constraints.validator import check_placement
 from app.logging.session_logger import SessionLogger
 from app.models.enums import Category
@@ -26,6 +27,7 @@ from app.scheduler.candidates import candidate_slot_sets
 from app.scheduler.objectives import (
     LATE_PERIOD,
     PREFER_EARLY_DEPARTMENTS,
+    QUARTERS_PER_TERM,
     Snapshot,
     Weights,
     _runs_gap,
@@ -40,17 +42,22 @@ MAX_PASSES = 20
 
 
 class _Neighbourhood:
-    """科目群を動かしたときに値が変わる範囲を引く索引。"""
+    """科目群を動かしたときに値が変わる範囲を引く索引。
+
+    鍵は `objectives.measure` とそろえてクオーター区間で切る。**片方だけ
+    学期で切ると、修復の順位付けと最終計測が別のものを測ることになる。**
+    """
 
     def __init__(self, context: Context) -> None:
         self.cohort: dict[tuple, list[str]] = collections.defaultdict(list)
         self.teacher: dict[tuple, list[str]] = collections.defaultdict(list)
         self.adjacent: dict[str, list[str]] = collections.defaultdict(list)
         for code, subject in context.subjects.items():
-            if subject.category is Category.REQUIRED:
-                self.cohort[(subject.department, subject.year, subject.term)].append(code)
-            if subject.teacher:
-                self.teacher[(subject.teacher, subject.term)].append(code)
+            for quarter in active_quarters(subject.term, subject.quarter):
+                if subject.category is Category.REQUIRED:
+                    self.cohort[(subject.department, subject.year, quarter)].append(code)
+                if subject.teacher:
+                    self.teacher[(subject.teacher, quarter)].append(code)
             if subject.adjacent_id:
                 self.adjacent[subject.adjacent_id].append(code)
 
@@ -58,10 +65,11 @@ class _Neighbourhood:
         cohorts, teachers, adjacent = set(), set(), set()
         for code in group:
             subject = context.subjects[code]
-            if subject.category is Category.REQUIRED:
-                cohorts.add((subject.department, subject.year, subject.term))
-            if subject.teacher:
-                teachers.add((subject.teacher, subject.term))
+            for quarter in active_quarters(subject.term, subject.quarter):
+                if subject.category is Category.REQUIRED:
+                    cohorts.add((subject.department, subject.year, quarter))
+                if subject.teacher:
+                    teachers.add((subject.teacher, quarter))
             if subject.adjacent_id:
                 adjacent.add(subject.adjacent_id)
         return cohorts, teachers, adjacent
@@ -82,12 +90,18 @@ class _Neighbourhood:
     ) -> float:
         cohorts, teachers, adjacent = keys
         total = 0.0
+        # 区間ごとに数えた値は measure と同じく学期あたりへ戻す。ここだけ
+        # 割り忘れると、順位付けと最終計測が別の尺度を使うことになる。
         for key in cohorts:
             codes = self.cohort[key]
-            total += weights.student_gaps * self._gaps(timetable, codes)
-            total += weights.student_days * self._days(timetable, codes)
+            total += weights.student_gaps * self._gaps(timetable, codes) / QUARTERS_PER_TERM
+            total += weights.student_days * self._days(timetable, codes) / QUARTERS_PER_TERM
         for key in teachers:
-            total += weights.teacher_gaps * self._gaps(timetable, self.teacher[key])
+            total += (
+                weights.teacher_gaps
+                * self._gaps(timetable, self.teacher[key])
+                / QUARTERS_PER_TERM
+            )
         for code in group:
             subject = context.subjects[code]
             if subject.department in PREFER_EARLY_DEPARTMENTS:
@@ -217,9 +231,9 @@ def repair(
     if logger is not None:
         logger.info(
             f"修復: {moves} 件を動かしました"
-            f"（学生の空きコマ {before.student_gaps}→{after.student_gaps}、"
-            f"登校日 {before.student_days}→{after.student_days}、"
-            f"教員の空きコマ {before.teacher_gaps}→{after.teacher_gaps}、"
+            f"（学生の空きコマ {before.student_gaps:g}→{after.student_gaps:g}、"
+            f"登校日 {before.student_days:g}→{after.student_days:g}、"
+            f"教員の空きコマ {before.teacher_gaps:g}→{after.teacher_gaps:g}、"
             f"5 限 {before.late_periods}→{after.late_periods}、"
             f"ゼミ非隣接 {before.seminars_apart}→{after.seminars_apart}）",
             stage="Stage 5.5",

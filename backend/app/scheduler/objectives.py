@@ -12,6 +12,7 @@ import collections
 from dataclasses import dataclass
 
 from app.constraints.context import Context
+from app.constraints.period_overlap import active_quarters
 from app.models.enums import Category, Department
 from app.models.timetable import Timetable
 
@@ -24,6 +25,16 @@ LATE_PERIOD = 5
 
 WEIGHT_STEPS = {"off": 0.0, "normal": 1.0, "high": 3.0}
 """スライダー 3 段階。気にしない／標準／重視。"""
+
+QUARTERS_PER_TERM = 2
+"""1 学期に含まれるクオーター区間の数。
+
+空きコマと登校日数はクオーター区間ごとに数えるため、学期をまたぐ科目は
+2 区間ぶん数えられる。この数で割って**学期あたりの値**に戻す。割らないと
+区間で数える項目だけが実質 2 倍の重みを持ち、5 限や ゼミ隣接との釣り合いが
+崩れる。実際、割らずに測ると同じスライダー設定で 5 限が 7→9、ゼミ非隣接が
+16→20 と悪化した。
+"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,11 +72,15 @@ def _runs_gap(periods: set[int]) -> int:
 
 @dataclass(slots=True)
 class Snapshot:
-    """時間割 1 つぶんの計測値。移動の前後で比べる。"""
+    """時間割 1 つぶんの計測値。移動の前後で比べる。
 
-    student_gaps: int = 0
-    student_days: int = 0
-    teacher_gaps: int = 0
+    空きコマと登校日数は学期あたりに正規化するため、クオーター科目が
+    絡むと半端な値になりうる。表示は `:g` で整えている。
+    """
+
+    student_gaps: float = 0.0
+    student_days: float = 0.0
+    teacher_gaps: float = 0.0
     late_periods: int = 0
     seminars_apart: int = 0
 
@@ -85,6 +100,13 @@ def measure(context: Context, timetable: Timetable) -> Snapshot:
     学生側は必修だけを見る。選択は履修者が分かれるので、空きコマや
     登校日数を全員ぶん語れない。必修は学科×年次の全員が出るため、
     そこだけが確実に言える。
+
+    **数える単位は学期ではなくクオーター区間である。** 学期でまとめると、
+    互いに重ならない前①と前②の科目が同時開講として数えられ、実際には
+    誰も体験しない空きコマを数えてしまう。制約側は §5.4 の
+    `active_quarters` で厳密に判定しているので、好みの計測も同じ土台に
+    載せる。学期をまたぐ科目は 2 区間ぶん数えられるため絶対値は増えるが、
+    修復は移動の前後を同じ尺度で比べるので順位付けは変わらない。
     """
     cohorts: dict[tuple, dict[str, set[int]]] = collections.defaultdict(
         lambda: collections.defaultdict(set)
@@ -99,11 +121,15 @@ def measure(context: Context, timetable: Timetable) -> Snapshot:
         subject = context.subjects.get(code)
         if subject is None:
             continue
+        quarters = active_quarters(subject.term, subject.quarter)
         for slot in assignment.slots:
-            if subject.category is Category.REQUIRED:
-                cohorts[(subject.department, subject.year, subject.term)][slot.day].add(slot.period)
-            if subject.teacher:
-                teachers[(subject.teacher, subject.term)][slot.day].add(slot.period)
+            for quarter in quarters:
+                if subject.category is Category.REQUIRED:
+                    cohorts[(subject.department, subject.year, quarter)][slot.day].add(
+                        slot.period
+                    )
+                if subject.teacher:
+                    teachers[(subject.teacher, quarter)][slot.day].add(slot.period)
             if (
                 slot.period == LATE_PERIOD
                 and subject.department in PREFER_EARLY_DEPARTMENTS
@@ -121,9 +147,13 @@ def measure(context: Context, timetable: Timetable) -> Snapshot:
             apart += 1
 
     return Snapshot(
-        student_gaps=sum(_runs_gap(ps) for days in cohorts.values() for ps in days.values()),
-        student_days=sum(len(days) for days in cohorts.values()),
-        teacher_gaps=sum(_runs_gap(ps) for days in teachers.values() for ps in days.values()),
+        student_gaps=sum(
+            _runs_gap(ps) for days in cohorts.values() for ps in days.values()
+        ) / QUARTERS_PER_TERM,
+        student_days=sum(len(days) for days in cohorts.values()) / QUARTERS_PER_TERM,
+        teacher_gaps=sum(
+            _runs_gap(ps) for days in teachers.values() for ps in days.values()
+        ) / QUARTERS_PER_TERM,
         late_periods=late,
         seminars_apart=apart,
     )
