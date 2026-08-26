@@ -4,6 +4,8 @@ Gemini が収束しなかった科目を確実に埋めるための最終手段�
 候補の少ない科目から順に確定させ、置けない科目は未配置として記録して
 先へ進む。必ず有限時間で終わり、部分解を返す。
 """
+from typing import Callable
+
 from app.constraints.context import Context
 from app.constraints.linking import linked_group
 from app.constraints.validator import check_placement
@@ -108,6 +110,7 @@ def solve(
     codes: list[str],
     *,
     node_limit: int = DEFAULT_NODE_LIMIT,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> list[str]:
     """codes を timetable に配置し、置けなかったコードを返す。
 
@@ -116,6 +119,10 @@ def solve(
     置く場所は候補のうち最も望ましいコマを選ぶ（preference.placement_preference 参照）。
     候補が 1 つも無い科目は未配置として記録し、残りの処理を続ける。
     反復回数が node_limit に達した場合は、そこまでの結果を返す。
+
+    `should_cancel` が True を返したら、そこで手を止めて残りを未配置と
+    して返す。**例外は投げない。** 中止を結果として扱うかどうかは
+    パイプラインの判断で、ソルバーは配置を壊さず止まるだけにしておく。
     """
     targets = [
         code for code in codes
@@ -151,6 +158,8 @@ def solve(
             )
 
     while remaining and steps < node_limit:
+        if should_cancel is not None and should_cancel():
+            break
         steps += 1
         # 候補数が同じ場合は、隣接させたい相手が既に置かれている科目を
         # 先に確定させる。間に他の科目が入って隣のコマが埋まる前に置けば

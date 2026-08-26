@@ -61,7 +61,12 @@
         <h3>組み替え対象</h3>
         <div id="retarget-list"></div>
       </div>
-      <button id="generate-button" class="primary">生成を開始</button>
+      <div class="button-row">
+        <button id="generate-button" class="primary">生成を開始</button>
+        <!-- AI モードは数十分かかる。止める手だてが画面に無いと、
+             間違えて始めた生成が終わるまで事務局は何もできない。 -->
+        <button id="cancel-button" disabled>中止する</button>
+      </div>
       </div>
       <div id="generate-status"></div>
     </section>

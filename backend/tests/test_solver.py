@@ -125,3 +125,26 @@ def test_result_is_deterministic():
         return {c: tt.slot_of(c) for c in codes}
 
     assert run(codes) == run(list(reversed(codes)))
+
+
+def test_cancelling_mid_search_keeps_what_is_already_placed():
+    """中止しても、そこまでの配置は壊さずに残りを未配置として返す。
+
+    例外はパイプライン側が投げる。ソルバーは黙って手を止めるだけに
+    しておくと、部分結果を検査したいテストからも扱いやすい。
+    """
+    subjects = [make(f"A{i}") for i in range(6)]
+    ctx = Context.from_lists(subjects, [])
+    tt = Timetable()
+
+    calls = []
+
+    def should_cancel():
+        calls.append(1)
+        return len(calls) > 2
+
+    unplaced = solve(ctx, tt, [s.code for s in subjects], should_cancel=should_cancel)
+
+    assert len(tt.placed_codes()) == 2, "中止までに置けた分は残る"
+    assert len(unplaced) == 4
+    assert set(tt.placed_codes()) & set(unplaced) == set()

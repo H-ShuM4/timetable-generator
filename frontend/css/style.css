@@ -189,6 +189,8 @@ button.primary {
 }
 button.primary:hover:not(:disabled) { background: var(--indigo-deep); border-color: var(--indigo-deep); }
 
+.button-row { display: flex; gap: 0.75rem; align-items: center; }
+
 input[type="text"], input[type="password"], input[type="number"], input:not([type]), select {
   padding: 0.375rem 0.5rem;
   border: 1px solid var(--rule);

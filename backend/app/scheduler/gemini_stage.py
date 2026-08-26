@@ -5,6 +5,7 @@
 """
 import time
 from collections import defaultdict
+from typing import Callable
 
 from app.constraints.context import Context
 from app.constraints.validator import check_placement
@@ -55,7 +56,11 @@ def chunk_codes(context: Context, codes: list[str]) -> list[tuple[str, list[str]
     ]
 
 
-def make_gemini_placer(client: GeminiClient, max_retries: int):
+def make_gemini_placer(
+    client: GeminiClient,
+    max_retries: int,
+    should_cancel: Callable[[], bool] | None = None,
+):
     """pipeline.run_pipeline に渡す gemini_placer を組み立てる。"""
 
     def place(
@@ -63,6 +68,11 @@ def make_gemini_placer(client: GeminiClient, max_retries: int):
     ) -> list[str]:
         unplaced: list[str] = []
         for label, chunk in chunk_codes(context, codes):
+            # 中止はチャンクの切れ目でだけ見る。送信済みの応答を捨てると
+            # Gemini の無料枠がそのぶん無駄になる。
+            if should_cancel is not None and should_cancel():
+                unplaced.extend(c for c in chunk if not timetable.is_placed(c))
+                continue
             unplaced.extend(_place_chunk(context, timetable, chunk, label, logger))
         return unplaced
 

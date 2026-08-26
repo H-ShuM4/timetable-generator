@@ -12,6 +12,7 @@ Gemini の無料枠も消費するため、サーバの再起動やブラウザ�
 """
 import json
 import shutil
+import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -53,6 +54,10 @@ class SessionData:
     logger: SessionLogger | None = None
     running: bool = False
     error: str | None = None
+    cancelled: bool = False
+    """直前の生成が事務局の中止で終わったか。失敗とは区別する。"""
+    cancel_event: threading.Event | None = None
+    """生成中だけ立つ。中止要求はこれを set して伝える。"""
 
     @property
     def context(self) -> Context:

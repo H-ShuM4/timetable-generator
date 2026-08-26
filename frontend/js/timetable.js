@@ -407,6 +407,11 @@ async function renderTimetable() {
       `<p class="log-ERROR">生成に失敗しました: ${escapeHtml(resultData.error || "不明なエラー")}</p>`;
     return;
   }
+  if (resultData.status === "cancelled") {
+    document.getElementById("timetable-grid").innerHTML =
+      "<p>生成を中止しました。「② 生成」からやり直してください。</p>";
+    return;
+  }
   if (resultData.status !== "done") {
     document.getElementById("timetable-grid").innerHTML = "<p>まだ生成が完了していません。</p>";
     return;

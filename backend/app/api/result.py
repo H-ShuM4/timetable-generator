@@ -106,7 +106,16 @@ async def unplace(session_id: str, payload: UnplaceIn) -> MoveOut:
 async def get_result(session_id: str) -> ResultOut:
     data = _require_session(session_id)
     if data.result is None:
-        status = "failed" if data.error else ("running" if data.running else "pending")
+        # 中止は失敗ではない。事務局が自分で止めたのだから、原因を探す
+        # メッセージではなく「中止しました」と伝える。
+        if data.error:
+            status = "failed"
+        elif data.cancelled:
+            status = "cancelled"
+        elif data.running:
+            status = "running"
+        else:
+            status = "pending"
         return ResultOut(
             status=status,
             placements=[], unplaced=[], violations=[], intensive=[],

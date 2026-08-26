@@ -112,6 +112,7 @@ class TeacherOut(BaseModel):
 
 class ResultOut(BaseModel):
     status: str
+    """done / running / pending / failed / cancelled。"""
     placements: list[PlacementOut]
     unplaced: list[SubjectRef]
     violations: list[ViolationOut]

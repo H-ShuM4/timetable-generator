@@ -111,3 +111,40 @@ def test_the_mode_identifiers_stay_stable_when_labels_change():
 
     assert [m.value for m in GenerationMode] == ["mock", "optimize", "inherit"]
     assert GenerationMode.OPTIMIZE.label == "AI モード"
+
+
+def test_cancel_without_a_running_generation_returns_409(monkeypatch):
+    session_id = _upload_small(monkeypatch)
+    response = client.post(f"/api/generate/{session_id}/cancel")
+    assert response.status_code == 409
+
+
+def test_cancel_for_an_unknown_session_returns_404():
+    assert client.post("/api/generate/nope/cancel").status_code == 404
+
+
+def test_a_cancelled_run_is_not_reported_as_a_failure(real_context):
+    """中止は事務局が自分で止めたもの。原因を探すメッセージは出さない。
+
+    実データを使うのは、中止を挟める長さの生成が要るため。ソルバーは
+    反復ごとに中止を見るので、押せばすぐ止まる。むしろ完走より速い。
+    """
+    from app.session_store import SessionData, store
+
+    session_id = store.create(SessionData(
+        subjects=list(real_context.subjects.values()),
+        teachers=dict(real_context.teachers),
+    ))
+    assert client.post(f"/api/generate/{session_id}", json={"mode": "mock"}).status_code == 202
+    assert client.post(f"/api/generate/{session_id}/cancel").status_code == 202
+
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        body = client.get(f"/api/result/{session_id}").json()
+        if body["status"] not in ("running", "pending"):
+            break
+        time.sleep(0.05)
+
+    assert body["status"] == "cancelled"
+    assert body["error"] is None
+    assert body["placements"] == [], "中止したら結果は残さない"

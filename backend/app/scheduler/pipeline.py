@@ -5,7 +5,7 @@ Gemini 段階は gemini_placer として注入する。注入しなければ
 """
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Protocol
+from typing import Callable, Protocol
 
 from app.constraints.context import Context, Violation
 from app.constraints.linking import linked_group
@@ -28,6 +28,16 @@ STAGE_ORDER: tuple[tuple[str, Category], ...] = (
     ("Stage 3", Category.ELECTIVE_REQUIRED),
     ("Stage 4", Category.ELECTIVE),
 )
+
+
+class GenerationCancelled(Exception):
+    """事務局が生成を中止した。
+
+    **中止したら結果は残さない。** 半端な時間割を「結果」として見せると、
+    どこまでが確定でどこからが未確定なのか事務局には判別できない。
+    §11 の「生成が例外で終わった場合は成功として見せない」と同じ扱いに
+    する。どこまで進んだかはログに残る。
+    """
 
 
 class GenerationMode(str, Enum):
@@ -116,8 +126,19 @@ def run_pipeline(
     inherit_plan: "InheritPlan | None" = None,
     weights: Weights | None = None,
     repair_seconds: float = 0.0,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> GenerationResult:
     logger.info(f"生成を開始します（{mode.label}）", stage="Stage 0")
+
+    def stop_if_cancelled(stage: str) -> None:
+        """段の変わり目で中止を確かめる。
+
+        段の途中では止めない。Gemini はチャンクの応答を捨てると無料枠が
+        無駄になり、ソルバーと修復は自前で中断点を持っている。
+        """
+        if should_cancel is not None and should_cancel():
+            logger.warn("生成を中止しました", stage=stage)
+            raise GenerationCancelled
 
     joint_mismatches = link_subjects(subjects)
     context = Context.from_lists(subjects, teachers)
@@ -150,6 +171,7 @@ def run_pipeline(
 
     if mode is not GenerationMode.MOCK and gemini_placer is not None:
         for stage_name, category in STAGE_ORDER:
+            stop_if_cancelled(stage_name)
             codes = [c for c in pending if context.subjects[c].category is category]
             if not codes:
                 continue
@@ -167,15 +189,19 @@ def run_pipeline(
         )
         pending = sorted(set(pending) | set(released))
 
+    stop_if_cancelled("Stage 5")
     if pending:
         logger.info(f"ソルバーで {len(pending)} 件を補完します", stage="Stage 5")
-    unplaced = solve(context, timetable, pending)
+    unplaced = solve(context, timetable, pending, should_cancel=should_cancel)
+    stop_if_cancelled("Stage 5")
     for code in unplaced:
         logger.warn(f"配置できませんでした: {code}", stage="Stage 5")
 
     if repair_seconds > 0 and weights is not None and not weights.is_idle:
         logger.info("配置を見直します", stage="Stage 5.5")
-        repair(context, timetable, weights, seconds=repair_seconds, logger=logger)
+        repair(context, timetable, weights, seconds=repair_seconds, logger=logger,
+               should_cancel=should_cancel)
+        stop_if_cancelled("Stage 5.5")
 
     violations = validate_all(context, timetable)
     level = logger.error if violations else logger.info

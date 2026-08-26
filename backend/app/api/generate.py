@@ -17,7 +17,7 @@ from app.scheduler.gemini_stage import make_gemini_placer
 from app.scheduler.objectives import Weights
 from app.scheduler.repair import EFFORT_SECONDS
 from app.scheduler.inherit import InheritPlan, detect_retarget_codes
-from app.scheduler.pipeline import GenerationMode, run_pipeline
+from app.scheduler.pipeline import GenerationCancelled, GenerationMode, run_pipeline
 from app.session_store import store
 from app.settings_store import SettingsStore
 
@@ -75,6 +75,7 @@ async def start_generation(session_id: str, payload: GenerateIn) -> dict:
     mode = GenerationMode(payload.mode)
 
     logger = SessionLogger(session_id)
+    cancel = threading.Event()
     if mode is not GenerationMode.MOCK and not api_key:
         logger.warn("API キーが未設定のためモックモードで実行します", stage="Stage 0")
         mode = GenerationMode.MOCK
@@ -116,7 +117,9 @@ async def start_generation(session_id: str, payload: GenerateIn) -> dict:
                 f"{'→'.join(models)}",
                 stage="Stage 0",
             )
-        placer = make_gemini_placer(gemini_client, settings.max_retries)
+        placer = make_gemini_placer(
+            gemini_client, settings.max_retries, should_cancel=lambda: cancel.is_set()
+        )
 
     inherit_plan = None
     if mode is GenerationMode.INHERIT:
@@ -128,6 +131,8 @@ async def start_generation(session_id: str, payload: GenerateIn) -> dict:
     data.logger = logger
     data.result = None
     data.error = None
+    data.cancelled = False
+    data.cancel_event = cancel
     data.running = True
 
     def worker() -> None:
@@ -137,17 +142,41 @@ async def start_generation(session_id: str, payload: GenerateIn) -> dict:
                 gemini_placer=placer, inherit_plan=inherit_plan,
                 weights=Weights.from_steps(payload.weights),
                 repair_seconds=EFFORT_SECONDS.get(payload.repair_effort, 0.0),
+                should_cancel=cancel.is_set,
             )
             store.save_result(session_id)
+        except GenerationCancelled:
+            # 事務局が自分で止めた。失敗ではないので error は立てない。
+            data.cancelled = True
         except Exception as error:  # 生成を止めず、必ずログに残す
             data.error = str(error)
             logger.error(f"生成中に予期しないエラーが発生しました: {error}", stage="Stage 6")
         finally:
             data.running = False
+            data.cancel_event = None
             logger.close()
 
     threading.Thread(target=worker, daemon=True).start()
     return {"status": "started", "mode": mode.value}
+
+
+@router.post("/generate/{session_id}/cancel", status_code=202)
+async def cancel_generation(session_id: str) -> dict:
+    """走っている生成を中止する。
+
+    AI モードは数十分かかる。止める手段が無いと、間違えて始めた生成が
+    終わるまで事務局は何もできず、`running` が立ったままなので次の生成も
+    409 で弾かれる。実際に止まるのは段の変わり目なので、押してすぐには
+    終わらないことがある。
+    """
+    data = _require_session(session_id)
+    if not data.running or data.cancel_event is None:
+        raise HTTPException(status_code=409, detail="生成は実行されていません")
+
+    data.cancel_event.set()
+    if data.logger is not None:
+        data.logger.warn("中止を受け付けました。区切りのよいところで止めます", stage="Stage 0")
+    return {"status": "cancelling"}
 
 
 @router.get("/generate/{session_id}/stream")

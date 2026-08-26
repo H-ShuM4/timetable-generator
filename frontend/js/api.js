@@ -60,6 +60,9 @@ const api = {
       }),
     });
   },
+  cancelGeneration(sessionId) {
+    return request(`/api/generate/${sessionId}/cancel`, { method: "POST" });
+  },
   getResult(sessionId) {
     return request(`/api/result/${sessionId}`);
   },

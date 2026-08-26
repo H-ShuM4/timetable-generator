@@ -146,6 +146,31 @@ function setStatus(message, isError) {
   element.className = isError ? "log-ERROR" : "";
 }
 
+function setRunning(running) {
+  document.getElementById("generate-button").disabled = running;
+  const cancel = document.getElementById("cancel-button");
+  cancel.disabled = !running;
+  cancel.textContent = "中止する";
+}
+
+async function cancelGeneration() {
+  const sessionId = window.appState.sessionId;
+  if (!sessionId) return;
+
+  const cancel = document.getElementById("cancel-button");
+  cancel.disabled = true;
+  cancel.textContent = "中止しています…";
+  try {
+    await api.cancelGeneration(sessionId);
+    // 実際に止まるのは段の変わり目なので、押してすぐには終わらない。
+    // 終わりは SSE の done で受け取る。
+    setStatus("中止しています。区切りのよいところで止まります…");
+  } catch (error) {
+    setRunning(true);
+    setStatus(`中止できませんでした: ${error.message}`, true);
+  }
+}
+
 async function startGeneration() {
   const sessionId = window.appState.sessionId;
   if (!sessionId) {
@@ -153,8 +178,7 @@ async function startGeneration() {
     return;
   }
 
-  const button = document.getElementById("generate-button");
-  button.disabled = true;
+  setRunning(true);
   clearLog();
   openLogPanel();
   setStatus("生成中です…");
@@ -169,7 +193,7 @@ async function startGeneration() {
       setStatus(`API キーが未設定のため ${label} モードで実行します`);
     }
     connectLogStream(sessionId, async (finished) => {
-      button.disabled = false;
+      setRunning(false);
       if (!finished) {
         setStatus("ログ配信が切断されました。結果タブで状態を確認してください", true);
         return;
@@ -177,6 +201,11 @@ async function startGeneration() {
       const result = await api.getResult(sessionId);
       if (result.status === "failed") {
         setStatus(`生成に失敗しました: ${result.error || "不明なエラー"}`, true);
+        return;
+      }
+      if (result.status === "cancelled") {
+        // 中止は失敗ではない。結果は残さないので結果タブも開けない。
+        setStatus("生成を中止しました。もう一度始めるには「生成を開始」を押してください");
         return;
       }
       setStatus(
@@ -191,7 +220,7 @@ async function startGeneration() {
       switchView("result");
     });
   } catch (error) {
-    button.disabled = false;
+    setRunning(false);
     setStatus(`生成を開始できませんでした: ${error.message}`, true);
   }
 }
@@ -199,6 +228,7 @@ async function startGeneration() {
 function initGenerate() {
   renderParams();
   document.getElementById("generate-button").addEventListener("click", startGeneration);
+  document.getElementById("cancel-button").addEventListener("click", cancelGeneration);
   document.querySelectorAll('input[name="mode"]').forEach((input) => {
     input.addEventListener("change", onEnterGenerateView);
   });

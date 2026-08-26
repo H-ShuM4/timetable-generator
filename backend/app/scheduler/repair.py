@@ -14,6 +14,7 @@ H12 に必ず触れるため、`linked_group` 単位で扱う。
 """
 import collections
 import time
+from typing import Callable
 
 from app.constraints.context import Context
 from app.constraints.linking import linked_group
@@ -177,6 +178,7 @@ def repair(
     *,
     seconds: float,
     logger: SessionLogger | None = None,
+    should_cancel: Callable[[], bool] | None = None,
 ) -> Snapshot:
     """良くなる移動を適用し、最終的な計測値を返す。"""
     before = measure(context, timetable)
@@ -192,6 +194,8 @@ def repair(
         improved = False
         for group in groups:
             if time.monotonic() > deadline:
+                break
+            if should_cancel is not None and should_cancel():
                 break
             keys = index.keys_for(context, group)
             placed = {code: timetable.assignments[code] for code in group
@@ -225,6 +229,8 @@ def repair(
                 _place_all(timetable, placed)
 
         if not improved or time.monotonic() > deadline:
+            break
+        if should_cancel is not None and should_cancel():
             break
 
     after = measure(context, timetable)

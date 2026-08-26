@@ -127,3 +127,21 @@ def test_part_time_subject_is_prelocked(tmp_path):
     assert result.timetable.slot_of("A1") == (TimeSlot("金", 2),)
     assert result.timetable.assignments["A1"].source is AssignmentSource.PRELOCK
     logger.close()
+
+
+def test_a_cancelled_run_stops_before_the_solver(tmp_path):
+    """中止は結果を残さない。
+
+    半端な時間割を「結果」として見せると、事務局は何が確定で何が
+    未確定か判別できない。どこまで進んだかはログに残る。
+    """
+    import pytest
+
+    from app.scheduler.pipeline import GenerationCancelled
+
+    subjects = [make(f"A{i}") for i in range(5)]
+    logger = SessionLogger("cancel-1", log_dir=tmp_path)
+    with pytest.raises(GenerationCancelled):
+        run_pipeline(subjects, [], GenerationMode.MOCK, logger,
+                     should_cancel=lambda: True)
+    logger.close()
