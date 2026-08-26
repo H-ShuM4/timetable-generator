@@ -7,6 +7,8 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from app.paths import storage_root
+
 API_KEY_NAME = "GEMINI_API_KEY"
 DEFAULT_MODEL = "gemini-2.5-flash"
 DEFAULT_MAX_RETRIES = 3
@@ -16,9 +18,9 @@ VISIBLE_PREFIX_LENGTH = 6
 HIDDEN_MINIMUM = 4
 """マスク時に必ず隠す末尾文字数。短いキーで全文が露出するのを防ぐ。"""
 
-_BACKEND_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_ENV_PATH = _BACKEND_DIR / ".env"
-DEFAULT_SETTINGS_PATH = _BACKEND_DIR / "data" / "settings.json"
+_ROOT = storage_root()
+DEFAULT_ENV_PATH = _ROOT / ".env"
+DEFAULT_SETTINGS_PATH = _ROOT / "data" / "settings.json"
 
 
 @dataclass(slots=True)

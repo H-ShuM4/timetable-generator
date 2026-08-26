@@ -9,7 +9,9 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
-DEFAULT_LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
+from app.paths import storage_root
+
+DEFAULT_LOG_DIR = storage_root() / "logs"
 
 
 @dataclass(frozen=True, slots=True)

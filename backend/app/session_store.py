@@ -26,10 +26,11 @@ from app.models.subject import Subject
 from app.models.teacher import Teacher
 from app.models.timeslot import TimeSlot
 from app.models.timetable import AssignmentSource, Timetable
+from app.paths import storage_root
 from app.scheduler.inherit import PreviousEntry
 from app.scheduler.pipeline import GenerationResult
 
-SESSIONS_DIR = Path(__file__).resolve().parents[1] / "data" / "sessions"
+SESSIONS_DIR = storage_root() / "data" / "sessions"
 
 MAX_SESSIONS = 20
 """保存しておくセッション数。古いものから消す。
