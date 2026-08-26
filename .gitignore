@@ -7,6 +7,10 @@ backend/logs/
 .pytest_cache/
 timetable-generator.zip
 
+# ブラウザ操作の副産物。スナップショットやコンソールログが溜まる。
+.playwright-mcp/
+test-results/
+
 # 事務局から受け取った実データ。教員の実名を含むため追跡しない。
 # 開発時はこのフォルダーに置いて使う。
 /カリキュラム一覧*.xlsx
