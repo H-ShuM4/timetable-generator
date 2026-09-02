@@ -28,7 +28,9 @@
       <div class="panel">
       <div id="dropzone">
         <p>カリキュラム一覧 ・ 教員一覧の Excel をここにドラッグ&amp;ドロップ</p>
-        <p class="hint">踏襲モードを使う場合は前年度のファイルも一緒に投入してください</p>
+        <p class="hint">
+          踏襲モードを使う場合は、前年度の時間割と前年度の教員一覧を<b>2 本とも</b>一緒に投入してください
+        </p>
         <input type="file" id="file-input" multiple accept=".xlsx">
       </div>
       <div id="file-assign"></div>
@@ -52,6 +54,9 @@
         <label><input type="radio" name="mode" value="optimize"> AI モード</label>
         <label><input type="radio" name="mode" value="inherit"> 踏襲モード</label>
       </div>
+      <!-- 前年度の 2 本がそろわないと踏襲は 1 件も働かない。選べるのに
+           何も起きないより、選べない理由が見えるほうがよい。 -->
+      <p class="hint" id="inherit-note" hidden></p>
       <div id="params">
         <h3>生成の重み付け</h3>
         <p class="hint">
@@ -65,6 +70,9 @@
 
       <div id="retarget-panel" hidden>
         <h3>組み替え対象</h3>
+        <p class="hint">
+          チェックを付けた科目だけを組み替えます。外した科目は前年度と同じ曜日・時限に固定されます。
+        </p>
         <div id="retarget-list"></div>
       </div>
       <div class="button-row">

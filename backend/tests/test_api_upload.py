@@ -160,3 +160,14 @@ def test_an_unreadable_file_leaves_no_temporary_files_behind(tmp_path, monkeypat
     )
     assert response.status_code == 400
     assert list(tmp_path.iterdir()) == []
+
+
+def test_the_summary_says_whether_each_previous_year_file_arrived():
+    """踏襲モードは前年度の 2 本がそろって初めて働く。
+
+    教員一覧だけ欠けても 1 件も踏襲されないので、画面がどちらの有無も
+    知れるようにしておく。
+    """
+    summary = _upload().json()["summary"]
+    assert summary["has_previous_year"] is False
+    assert summary["has_previous_teachers"] is False

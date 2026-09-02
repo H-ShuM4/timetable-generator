@@ -6,22 +6,110 @@ function selectedMode() {
   return document.querySelector('input[name="mode"]:checked').value;
 }
 
+// 踏襲モードは前年度の 2 本がそろって初めて働く。時間割だけ入れて教員一覧を
+// 忘れると、研究日の比較が「前年度＝なし」対「今年度＝あり」となって全専任が
+// 組み替え対象へ落ち、1 件も引き継がれない。実データでは 613 件中 613 件が
+// 組み替えになる。エラーも出ないので「動いていない」ようにしか見えなかった。
+const PREVIOUS_FILES = [
+  { key: "has_previous_year", label: "前年度の時間割" },
+  { key: "has_previous_teachers", label: "前年度の教員一覧" },
+];
+
+function missingPreviousFiles() {
+  const summary = window.appState.summary;
+  if (!summary) return PREVIOUS_FILES.map((file) => file.label);
+  return PREVIOUS_FILES.filter((file) => !summary[file.key]).map((file) => file.label);
+}
+
+function updateInheritAvailability() {
+  const radio = document.querySelector('input[name="mode"][value="inherit"]');
+  const note = document.getElementById("inherit-note");
+  const missing = missingPreviousFiles();
+
+  radio.disabled = missing.length > 0;
+  if (!missing.length) {
+    note.hidden = true;
+    note.textContent = "";
+    return;
+  }
+  // textContent なのでエスケープは要らない（文言はこちらが決めた固定文字列）
+  note.hidden = false;
+  note.textContent =
+    `踏襲モードには ${missing.join(" と ")} が要ります。`
+    + "「① ファイル読込」へ戻り、一緒に読み込んでください。"
+    + "（片方だけでは 1 件も引き継がれません）";
+  // 押せないモードが選ばれたままにしない
+  if (radio.checked) {
+    document.querySelector('input[name="mode"][value="mock"]').checked = true;
+  }
+}
+
+function retargetSummary() {
+  const summary = window.appState.summary || {};
+  const total = (summary.subject_count || 0) - (summary.intensive_count || 0);
+  const change = retargetItems.length;
+  const keep = Math.max(0, total - change);
+  return `<p class="retarget-summary">`
+    + `${total} 科目のうち <b>${change}</b> 件を組み替え、`
+    + `<b>${keep}</b> 件は前年度のコマのままにします</p>`;
+}
+
+function groupByReason(items) {
+  const groups = new Map();
+  items.forEach((item) => {
+    if (!groups.has(item.reason)) groups.set(item.reason, []);
+    groups.get(item.reason).push(item);
+  });
+  // 件数の多い順。同数なら理由名の順で、並びを決定的にする。
+  return [...groups.entries()].sort(
+    (a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "ja")
+  );
+}
+
+function setAllRetarget(checked) {
+  document.querySelectorAll("#retarget-list input[type=checkbox]")
+    .forEach((box) => { box.checked = checked; });
+}
+
 function renderRetargetList() {
   const container = document.getElementById("retarget-list");
   if (!retargetItems.length) {
-    container.innerHTML = "<p>組み替え対象はありません。前年度ファイルを読み込んでください。</p>";
+    container.innerHTML =
+      "<p>組み替えが要る科目はありません。すべて前年度のコマのままになります。</p>";
     return;
   }
-  container.innerHTML = retargetItems
-    .map((item) => `
-      <label class="field">
-        <input type="checkbox" value="${escapeHtml(item.code)}" checked>
-        ${escapeHtml(item.code)} ${escapeHtml(item.name)}（${escapeHtml(item.teacher)}） — ${escapeHtml(item.reason)}
-      </label>`)
-    .join("");
+
+  // 理由ごとに畳んでおく。実データでは非常勤だけで 141 件あり、
+  // 開いたまま並べると何件あるのかが読み取れない。
+  const groups = groupByReason(retargetItems).map(([reason, items]) => `
+    <details class="retarget-group">
+      <summary>${escapeHtml(reason)} <span class="count">${items.length}</span></summary>
+      <div class="retarget-items">
+        ${items.map((item) => `
+          <label class="retarget-item">
+            <input type="checkbox" value="${escapeHtml(item.code)}" checked>
+            <span class="retarget-code">${escapeHtml(item.code)}</span>
+            <span class="retarget-name">${escapeHtml(item.name)}</span>
+            <span class="retarget-teacher">${escapeHtml(item.teacher)}</span>
+          </label>`).join("")}
+      </div>
+    </details>`).join("");
+
+  container.innerHTML = retargetSummary()
+    + `<div class="retarget-actions">
+         <button type="button" id="retarget-all">すべて選択</button>
+         <button type="button" id="retarget-none">すべて解除</button>
+       </div>`
+    + groups;
+
+  document.getElementById("retarget-all")
+    .addEventListener("click", () => setAllRetarget(true));
+  document.getElementById("retarget-none")
+    .addEventListener("click", () => setAllRetarget(false));
 }
 
 async function onEnterGenerateView() {
+  updateInheritAvailability();
   const isInherit = selectedMode() === "inherit";
   document.getElementById("retarget-panel").hidden = !isInherit;
   if (!isInherit || !window.appState.sessionId) return;

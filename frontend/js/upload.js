@@ -72,8 +72,12 @@ function renderSummary(summary) {
     ["学科別", tallies(summary.by_department)],
     ["科目区分別", tallies(summary.by_category)],
     ["教員区分別", tallies(summary.by_teacher_kind)],
-    ["前年度データ",
+    // 踏襲モードは前年度の 2 本がそろって初めて働く。片方だけ欠けても
+    // 1 件も踏襲されないので、まとめず別々に出す。
+    ["前年度の時間割",
       `<span class="tally">${summary.has_previous_year ? "あり" : "なし"}</span>`],
+    ["前年度の教員一覧",
+      `<span class="tally">${summary.has_previous_teachers ? "あり" : "なし"}</span>`],
   ];
 
   document.getElementById("upload-summary").innerHTML = `
@@ -131,6 +135,9 @@ function adoptSession(body, restored) {
   // 通し直して復元できる。ID を localStorage に置いておけば、ブラウザの
   // 再読み込みやサーバの再起動をまたいで続きから作業できる。
   window.appState.sessionId = body.session_id;
+  // 生成画面が踏襲モードの可否を判断するのに要る。アップロード・復元・
+  // 保存済みセッションの選び直しが 3 つともここを通るので、1 箇所で足りる。
+  window.appState.summary = body.summary;
   try {
     window.localStorage.setItem(SESSION_KEY, body.session_id);
   } catch (error) {

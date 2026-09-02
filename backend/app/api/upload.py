@@ -113,6 +113,7 @@ def build_summary(data: SessionData) -> UploadSummary:
             collections.Counter(t.kind.value for t in data.teachers.values())
         ),
         has_previous_year=bool(data.previous_entries),
+        has_previous_teachers=bool(data.previous_teachers),
     )
 
 

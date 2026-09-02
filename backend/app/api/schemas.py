@@ -18,6 +18,14 @@ class UploadSummary(BaseModel):
     by_category: dict[str, int]
     by_teacher_kind: dict[str, int]
     has_previous_year: bool
+    """前年度の時間割を読んだか。"""
+    has_previous_teachers: bool = False
+    """前年度の教員一覧を読んだか。
+
+    踏襲モードは 2 本そろって初めて働く。教員一覧が無いと研究日の比較が
+    「前年度＝なし」対「今年度＝あり」となって全専任が組み替え対象へ落ち、
+    1 件も踏襲されない。どちらが欠けているかを画面へ届けるために分けて持つ。
+    """
 
 
 class UploadResponse(BaseModel):

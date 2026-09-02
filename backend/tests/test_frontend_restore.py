@@ -32,9 +32,13 @@ def test_the_load_summary_leads_with_the_four_headline_counts(run_js):
 
 
 def test_each_breakdown_entry_stands_on_its_own(run_js):
-    """「会計 234 / 経営 262」と 1 行に潰さず、区切って読めるようにする。"""
+    """「会計 234 / 経営 262」と 1 行に潰さず、区切って読めるようにする。
+
+    末尾の「なし」2 つは前年度の時間割と教員一覧。踏襲モードは 2 本
+    そろって初めて働くので、まとめず別々に出す。
+    """
     tallies = run_js("restore_session.js")["summary"]["tallies"]
-    assert tallies == ["会計", "経営", "必修", "非常勤", "なし"]
+    assert tallies == ["会計", "経営", "必修", "非常勤", "なし", "なし"]
 
 
 def test_warnings_are_amber_not_vermilion(run_js):
