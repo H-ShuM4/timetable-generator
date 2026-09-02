@@ -134,3 +134,44 @@ def test_apply_plan_leaves_a_subject_that_became_intensive_off_the_grid(tmp_path
     logger.close()
 
     assert timetable.is_placed("A1") is False
+
+
+def test_apply_plan_reports_which_rule_blocked_each_subject(tmp_path):
+    """「制約に合いません」だけでは事務局が追えない。
+
+    どの制約に、どの科目とぶつかったのかまで残す。実データでは 35 件が
+    こうなり、その内訳を人が読めないと原因にたどり着けなかった。
+    """
+    blocker = make("A1", teacher="専任甲")
+    blocked = make("A2", teacher="専任甲")
+    context = Context.from_lists(
+        [blocker, blocked], [Teacher("専任甲", TeacherKind.FULL_TIME)]
+    )
+    timetable = Timetable()
+    timetable.place("A1", (TimeSlot("月", 1),), AssignmentSource.PRELOCK)
+
+    plan = InheritPlan({"A2": PreviousEntry((TimeSlot("月", 1),), "専任甲")}, set())
+    logger = SessionLogger("skips", log_dir=tmp_path)
+    skips = apply_plan(context, timetable, plan, logger)
+    logger.close()
+
+    assert len(skips) == 1
+    assert skips[0].code == "A2"
+    assert skips[0].rule_id == "H1"
+    assert skips[0].related_code == "A1"
+    assert "専任甲" in skips[0].message
+    assert timetable.is_placed("A2") is False
+
+
+def test_apply_plan_reports_nothing_when_everything_fits(tmp_path):
+    subject = make("A1")
+    context = Context.from_lists([subject], [])
+    timetable = Timetable()
+    plan = InheritPlan({"A1": PreviousEntry((TimeSlot("木", 2),), "専任甲")}, set())
+
+    logger = SessionLogger("noskips", log_dir=tmp_path)
+    skips = apply_plan(context, timetable, plan, logger)
+    logger.close()
+
+    assert skips == []
+    assert timetable.slot_of("A1") == (TimeSlot("木", 2),)

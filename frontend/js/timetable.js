@@ -255,9 +255,32 @@ function renderSide() {
       .map((v) => `<li>[${escapeHtml(v.rule_id)}] ${escapeHtml(v.message)}</li>`)
       .join("") || "<li>違反はありません</li>";
 
+  renderInheritSkipped();
+
   setCount("count-unplaced", resultData.unplaced.length);
   setCount("count-intensive", resultData.intensive.length);
   setCount("count-violations", resultData.violations.length, true);
+}
+
+function renderInheritSkipped() {
+  // 踏襲モード以外では空なので、丸ごと隠す。
+  const skipped = resultData.inherit_skipped || [];
+  const block = document.getElementById("block-inherit-skipped");
+  if (!block) return;
+  block.hidden = skipped.length === 0;
+  if (!skipped.length) return;
+
+  document.getElementById("inherit-skipped-list").innerHTML = skipped
+    .map((entry) => {
+      const partner = entry.related
+        ? `（相手: ${escapeHtml(entry.related.name)}）`
+        : "";
+      return `<li>[${escapeHtml(entry.rule_id)}] ${describeSubjectRef(entry.subject)}`
+        + `<span class="skip-reason">${escapeHtml(entry.message)}${partner}</span></li>`;
+    })
+    .join("");
+  // 朱は制約違反だけに使う。踏襲できなかったのは違反ではない。
+  setCount("count-inherit-skipped", skipped.length);
 }
 
 function attachDragHandlers() {

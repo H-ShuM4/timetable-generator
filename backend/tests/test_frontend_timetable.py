@@ -118,3 +118,32 @@ def test_the_teacher_panel_stays_out_of_the_way_in_the_department_view(run_js):
     out = run_js("timetable_render.js")
     assert out["teacher_panel_hidden"] is False
     assert out["panel_hidden_in_department_view"] is True
+
+
+def test_the_result_screen_says_why_a_subject_could_not_be_inherited(run_js):
+    """「制約に合いません」だけでは事務局が追えない。
+
+    どの制約に、どの科目とぶつかったのかを画面に出す。
+    """
+    out = run_js("timetable_render.js")
+    assert out["skip_block_hidden"] is False
+    assert out["skip_count"] == "1"
+    assert "[H1]" in out["skip_html"]
+    assert "重複しています" in out["skip_html"]
+    assert "相手: 踏襲できた科目" in out["skip_html"]
+
+
+def test_the_skipped_count_is_not_vermilion(run_js):
+    """朱は制約違反だけに使う。踏襲できなかったのは違反ではない（§8.2）。"""
+    assert run_js("timetable_render.js")["skip_count_is_alert"] is False
+
+
+def test_the_skipped_block_stays_out_of_the_way_in_other_modes(run_js):
+    """モックと AI モードでは空になるので、丸ごと隠す。"""
+    assert run_js("timetable_render.js")["skip_block_hidden_when_empty"] is True
+
+
+def test_a_subject_name_in_the_skipped_list_cannot_inject_markup(run_js):
+    html = run_js("timetable_render.js")["skip_html"]
+    assert "<img" not in html
+    assert "&lt;img" in html

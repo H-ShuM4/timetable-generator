@@ -6,6 +6,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.api.schemas import (
+    InheritSkipOut,
     MoveIn,
     MoveOut,
     PlacementOut,
@@ -52,6 +53,23 @@ def _to_teacher_refs(context) -> list[TeacherOut]:
         )
         for teacher in sorted(context.teachers.values(), key=lambda t: t.name)
     ]
+
+
+def _to_inherit_skips(skips, context) -> list[InheritSkipOut]:
+    """踏襲できなかった記録に、科目名と相手の科目を補って返す。"""
+    out: list[InheritSkipOut] = []
+    for skip in skips:
+        subject = _to_subject_refs([skip.code], context)
+        if not subject:
+            continue
+        related = _to_subject_refs([skip.related_code], context) if skip.related_code else []
+        out.append(InheritSkipOut(
+            subject=subject[0],
+            rule_id=skip.rule_id,
+            message=skip.message,
+            related=related[0] if related else None,
+        ))
+    return out
 
 
 def _to_subject_refs(codes: list[str], context) -> list[SubjectRef]:
@@ -147,6 +165,7 @@ async def get_result(session_id: str) -> ResultOut:
         unplaced=_to_subject_refs(data.result.unplaced, context),
         violations=[_to_violation(v) for v in data.result.violations],
         intensive=_to_subject_refs(data.result.intensive_codes, context),
+        inherit_skipped=_to_inherit_skips(data.result.inherit_skips, context),
         teachers=_to_teacher_refs(context),
     )
 

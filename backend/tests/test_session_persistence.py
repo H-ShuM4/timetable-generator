@@ -162,3 +162,40 @@ def test_upload_and_restore_read_the_workbooks_the_same_way(store, uploaded):
 
     assert fingerprint(restored) == fingerprint(original)
     assert [w.message for w in restored.warnings] == [w.message for w in original.warnings]
+
+
+def test_the_inherit_reasons_are_saved_and_read_back(tmp_path):
+    """踏襲できなかった理由は生成のときにしか分からない。
+
+    制約違反と違って再計算できないので、保存しないとサーバの再起動で
+    消える。事務局は「なぜ灰色にならなかったか」を追えなくなる。
+    """
+    import json
+
+    from app.scheduler.inherit import InheritSkip
+    from app.scheduler.pipeline import GenerationResult
+    from app.models.timetable import Timetable
+    from app.session_store import SessionData, SessionStore
+    from tests.factories import subject as make
+
+    store = SessionStore(tmp_path)
+    subjects = [make("A1"), make("A2")]
+    data = SessionData(subjects=subjects, teachers={})
+    data.result = GenerationResult(
+        timetable=Timetable(),
+        inherit_skips=[InheritSkip("A2", "H1", "専任甲 が 月1 で重複しています", "A1")],
+    )
+    session_id = store.create(data)
+    path = store.save_result(session_id)
+
+    saved = json.loads(path.read_text(encoding="utf-8"))["inherit_skips"]
+    assert saved == [{
+        "code": "A2", "rule_id": "H1",
+        "message": "専任甲 が 月1 で重複しています", "related_code": "A1",
+    }]
+
+    restored = SessionData(subjects=subjects, teachers={})
+    store._apply_saved_result(tmp_path / session_id, restored)
+    assert [s.code for s in restored.result.inherit_skips] == ["A2"]
+    assert restored.result.inherit_skips[0].rule_id == "H1"
+    assert restored.result.inherit_skips[0].related_code == "A1"

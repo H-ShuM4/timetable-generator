@@ -105,6 +105,13 @@
             <p class="hint">グリッドへドラッグすると手で配置できます。</p>
             <ul id="unplaced-list"></ul>
           </details>
+          <!-- 踏襲モードのときだけ出す。前年度の枠へ戻せなかった科目と、
+               どの制約に触れたのかを事務局が自分で追えるようにする。 -->
+          <details class="side-block" id="block-inherit-skipped" hidden>
+            <summary>踏襲できなかった科目 <span class="count" id="count-inherit-skipped">0</span></summary>
+            <p class="hint">前年度と同じコマに戻すと、今年度の決まりに反する科目です。</p>
+            <ul id="inherit-skipped-list"></ul>
+          </details>
           <details class="side-block" id="block-intensive">
             <summary>集中講義 <span class="count" id="count-intensive">0</span></summary>
             <ul id="intensive-list"></ul>

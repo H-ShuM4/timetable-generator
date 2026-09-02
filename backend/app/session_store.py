@@ -28,7 +28,7 @@ from app.models.teacher import Teacher
 from app.models.timeslot import TimeSlot
 from app.models.timetable import AssignmentSource, Timetable
 from app.paths import storage_root
-from app.scheduler.inherit import PreviousEntry
+from app.scheduler.inherit import InheritSkip, PreviousEntry
 from app.scheduler.pipeline import GenerationResult
 
 SESSIONS_DIR = storage_root() / "data" / "sessions"
@@ -195,6 +195,14 @@ class SessionStore:
             violations=validate_all(context, timetable),
             warnings=data.warnings,
             intensive_codes=[c for c in payload.get("intensive", []) if c in known],
+            inherit_skips=[
+                InheritSkip(
+                    code=item["code"], rule_id=item["rule_id"],
+                    message=item["message"], related_code=item.get("related_code"),
+                )
+                for item in payload.get("inherit_skips", [])
+                if item.get("code") in known
+            ],
         )
 
     # ------------------------------------------------------------------ 保存
@@ -225,6 +233,17 @@ class SessionStore:
                 for v in data.result.violations
             ],
             "intensive": data.result.intensive_codes,
+            # 生成のときにしか分からない記録で、あとから計算し直せない。
+            # 制約違反と違って再計算しないので、そのまま保存する。
+            "inherit_skips": [
+                {
+                    "code": s.code,
+                    "rule_id": s.rule_id,
+                    "message": s.message,
+                    "related_code": s.related_code,
+                }
+                for s in data.result.inherit_skips
+            ],
         }
         directory = self._dir / session_id
         directory.mkdir(parents=True, exist_ok=True)

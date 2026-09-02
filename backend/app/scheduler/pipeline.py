@@ -17,7 +17,7 @@ from app.models.enums import Category
 from app.models.subject import Subject
 from app.models.teacher import Teacher
 from app.models.timetable import Timetable
-from app.scheduler.inherit import InheritPlan, apply_plan
+from app.scheduler.inherit import InheritPlan, InheritSkip, apply_plan
 from app.scheduler.objectives import Weights
 from app.scheduler.prelock import prelock
 from app.scheduler.repair import repair
@@ -77,6 +77,8 @@ class GenerationResult:
     violations: list[Violation] = field(default_factory=list)
     warnings: list[Warning] = field(default_factory=list)
     intensive_codes: list[str] = field(default_factory=list)
+    inherit_skips: list[InheritSkip] = field(default_factory=list)
+    """踏襲モードで、前年度の枠へ戻せなかった科目とその理由。"""
 
 
 def release_partial_groups(
@@ -156,13 +158,22 @@ def run_pipeline(
             f"集中講義 {len(intensive_codes)} 件をグリッド対象外にしました", stage="Stage 0"
         )
 
-    timetable, leftover = prelock(context, subjects)
+    # 踏襲モードでは、事前ロックにも前年度のコマを希望として渡す。渡さないと
+    # 候補の先頭（月曜 1 限寄り）を取り、前年度からいた科目を押し出す。
+    # 他のモードには渡さないので挙動は変わらない。
+    prefer = None
+    if mode is GenerationMode.INHERIT and inherit_plan is not None:
+        prefer = {
+            code: entry.slots for code, entry in inherit_plan.previous_slots.items()
+        }
+    timetable, leftover = prelock(context, subjects, prefer=prefer)
     logger.info(f"事前ロック {len(timetable.placed_codes())} 件", stage="Stage 1")
     for code in leftover:
         logger.warn(f"非常勤の出勤可能コマに空きがありません: {code}", stage="Stage 1")
 
+    inherit_skips: list[InheritSkip] = []
     if mode is GenerationMode.INHERIT and inherit_plan is not None:
-        apply_inherit_plan(context, timetable, inherit_plan, logger)
+        inherit_skips = apply_inherit_plan(context, timetable, inherit_plan, logger)
 
     pending = [
         s.code for s in subjects
@@ -219,9 +230,10 @@ def run_pipeline(
         violations=violations,
         warnings=warnings,
         intensive_codes=intensive_codes,
+        inherit_skips=inherit_skips,
     )
 
 
-def apply_inherit_plan(context, timetable, inherit_plan, logger) -> None:
-    """踏襲モードで前年度の配置を反映する。"""
-    apply_plan(context, timetable, inherit_plan, logger)
+def apply_inherit_plan(context, timetable, inherit_plan, logger) -> list[InheritSkip]:
+    """踏襲モードで前年度の配置を反映し、戻せなかった科目を返す。"""
+    return apply_plan(context, timetable, inherit_plan, logger)

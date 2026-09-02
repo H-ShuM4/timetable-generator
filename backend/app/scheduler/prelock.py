@@ -6,6 +6,7 @@
 from app.constraints.context import Context
 from app.models.enums import TeacherKind
 from app.models.subject import Subject
+from app.models.timeslot import TimeSlot
 from app.models.timetable import AssignmentSource, Timetable
 from app.scheduler.candidates import feasible_slot_sets
 
@@ -19,10 +20,23 @@ def _is_part_time_with_availability(context: Context, subject: Subject) -> bool:
     )
 
 
-def prelock(context: Context, subjects: list[Subject]) -> tuple[Timetable, list[str]]:
+def prelock(
+    context: Context,
+    subjects: list[Subject],
+    *,
+    prefer: dict[str, tuple[TimeSlot, ...]] | None = None,
+) -> tuple[Timetable, list[str]]:
     """確定枠と非常勤の担当科目を配置し、置けなかったコードを返す。
 
     特任教員は曜日しか定まらないため対象外とし、Stage 2〜4 に委ねる。
+
+    `prefer` は「置けるならこのコマにしたい」という希望（踏襲モードが
+    前年度の配置を渡す）。**候補に残っているものしか選ばない**ので、制約は
+    従来どおり全部通る。希望が候補に無ければこれまでどおり候補の先頭を取る。
+
+    これが無いと、事前ロックは候補の先頭＝月曜 1 限寄りを機械的に取るため
+    前年度と別のコマを選びやすい。実データでは非常勤 133 件のうち 54 件が
+    動き、そのコマに前年度からいた 11 件を押し出していた。
     """
     timetable = Timetable()
     unplaced: list[str] = []
@@ -44,6 +58,8 @@ def prelock(context: Context, subjects: list[Subject]) -> tuple[Timetable, list[
         if not options:
             unplaced.append(subject.code)
             continue
-        timetable.place(subject.code, options[0], AssignmentSource.PRELOCK)
+        wanted = (prefer or {}).get(subject.code)
+        chosen = wanted if wanted in options else options[0]
+        timetable.place(subject.code, chosen, AssignmentSource.PRELOCK)
 
     return timetable, unplaced

@@ -552,6 +552,10 @@ table.timetable td.dragover { background: var(--indigo-wash); box-shadow: inset 
 
 #violation-list li { color: var(--vermilion); }
 
+/* 踏襲できなかった理由。違反ではないので朱は使わない。 */
+#inherit-skipped-list li { margin-bottom: 0.375rem; }
+.skip-reason { display: block; color: var(--ink-soft); font-size: 0.75rem; }
+
 /* ---------------------------------------------------------------- ログ */
 
 #log-panel {

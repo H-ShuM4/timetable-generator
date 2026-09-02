@@ -89,6 +89,20 @@ const doubleSlot = {
   intensive: [], violations: [],
 };
 
+const withInheritSkips = {
+  placements: [placement("K1", "踏襲できた科目", 1, ["月1"], { source: "inherited" })],
+  unplaced: [], intensive: [], violations: [],
+  inherit_skipped: [
+    {
+      subject: { code: "S1", name: '<img src=x onerror=alert(1)>', teacher: "専任甲",
+                 department: "経営", year: 1, term: "前期", category: "必修" },
+      rule_id: "H1", message: "専任甲 が 月1 に 別科目 と重複しています",
+      related: { code: "K1", name: "踏襲できた科目", teacher: "専任甲",
+                 department: "経営", year: 1, term: "前期", category: "必修" },
+    },
+  ],
+};
+
 function run() {
   const out = {};
 
@@ -121,6 +135,21 @@ function run() {
 
   sandbox.renderSide();
   out.unplaced_html = sandbox.document.nodes["unplaced-list"].innerHTML;
+
+  // ---- 踏襲できなかった科目 -----------------------------------------
+  sandbox = load(withInheritSkips);
+  sandbox.renderSide();
+  out.skip_block_hidden = sandbox.document.nodes["block-inherit-skipped"].hidden === true;
+  out.skip_count = sandbox.document.nodes["count-inherit-skipped"].textContent;
+  out.skip_count_is_alert =
+    sandbox.document.nodes["count-inherit-skipped"].classes.has("alert");
+  out.skip_html = sandbox.document.nodes["inherit-skipped-list"].innerHTML
+    .replace(/\s+/g, " ").trim();
+
+  sandbox = load(shuffled);
+  sandbox.renderSide();
+  out.skip_block_hidden_when_empty =
+    sandbox.document.nodes["block-inherit-skipped"].hidden === true;
 
   sandbox = load(acrossDepartments);
   vm.runInContext('currentView = "teacher"; currentTeacher = "渡り先生";', sandbox);

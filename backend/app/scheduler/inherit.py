@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.constraints.context import Context
-from app.constraints.validator import is_allowed
+from app.constraints.validator import check_placement
 from app.ingest.curriculum_reader import read_curriculum
 from app.logging.session_logger import SessionLogger
 from app.models.enums import TeacherKind
@@ -24,6 +24,22 @@ RETARGET_KINDS = (TeacherKind.PART_TIME, TeacherKind.SPECIAL)
 class PreviousEntry:
     slots: tuple[TimeSlot, ...]
     teacher: str
+
+
+@dataclass(frozen=True, slots=True)
+class InheritSkip:
+    """前年度の枠へ戻せなかった科目と、その理由。
+
+    「制約に合いません」だけでは事務局が追えない。どの制約に、どの科目と
+    ぶつかったのかまで残す。実データでは 35 件がこうなり、内訳を読めないと
+    原因（前年度の時間割自体の衝突／事前ロックの移動／今年度に入った規則）に
+    たどり着けなかった。
+    """
+
+    code: str
+    rule_id: str
+    message: str
+    related_code: str | None = None
 
 
 @dataclass(slots=True)
@@ -85,9 +101,14 @@ def detect_retarget_codes(
 
 def apply_plan(
     context: Context, timetable: Timetable, plan: InheritPlan, logger: SessionLogger
-) -> None:
-    """組み替え対象でない科目を前年度と同じコマに配置する。"""
+) -> list[InheritSkip]:
+    """組み替え対象でない科目を前年度と同じコマに配置する。
+
+    戻せなかった科目は理由を添えて返す。画面と結果 JSON へ渡り、事務局が
+    「なぜ灰色にならなかったのか」を自分で追えるようにする。
+    """
     inherited = 0
+    skipped: list[InheritSkip] = []
     for code, previous in plan.previous_slots.items():
         if code in plan.retarget_codes:
             continue
@@ -100,14 +121,26 @@ def apply_plan(
         # 今年度は時限99 なのに前年度の 水5 へ置かれていた。
         if subject.is_intensive:
             continue
-        if not is_allowed(context, timetable, subject, previous.slots):
+        violations = check_placement(context, timetable, subject, previous.slots)
+        if violations:
+            first = violations[0]
+            where = "".join(f"{s.day}{s.period}" for s in previous.slots)
+            skipped.append(InheritSkip(
+                code=code, rule_id=first.rule_id, message=first.message,
+                related_code=first.related_code,
+            ))
             logger.warn(
-                f"前年度の配置が今年度の制約に合いません: {subject.name}",
+                f"[{first.rule_id}] {subject.name} を前年度の {where} へ戻せません: "
+                f"{first.message}",
                 stage="Stage 1",
             )
             continue
         timetable.place(code, previous.slots, AssignmentSource.INHERITED)
         inherited += 1
 
-    logger.info(f"前年度から {inherited} 件を踏襲しました", stage="Stage 1")
-    logger.info(f"組み替え対象は {len(plan.retarget_codes)} 件です", stage="Stage 1")
+    logger.info(
+        f"前年度から {inherited} 件を踏襲、{len(skipped)} 件は今年度の制約に合わず、"
+        f"{len(plan.retarget_codes)} 件は組み替え対象です",
+        stage="Stage 1",
+    )
+    return skipped

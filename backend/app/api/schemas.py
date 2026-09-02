@@ -118,6 +118,15 @@ class TeacherOut(BaseModel):
     """非常勤のみ。空なら曜日・時限の制限なし。"""
 
 
+class InheritSkipOut(BaseModel):
+    """踏襲モードで前年度の枠へ戻せなかった科目と、その理由。"""
+
+    subject: SubjectRef
+    rule_id: str
+    message: str
+    related: SubjectRef | None = None
+
+
 class ResultOut(BaseModel):
     status: str
     """done / running / pending / failed / cancelled。"""
@@ -125,6 +134,8 @@ class ResultOut(BaseModel):
     unplaced: list[SubjectRef]
     violations: list[ViolationOut]
     intensive: list[SubjectRef]
+    inherit_skipped: list[InheritSkipOut] = []
+    """踏襲モードのときだけ入る。なぜ灰色にならなかったかを画面で追えるように。"""
     teachers: list[TeacherOut] = []
     """教員ビューで勤務条件と照らし合わせるために返す。"""
     error: str | None = None

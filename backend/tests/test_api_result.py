@@ -236,3 +236,68 @@ def test_a_move_reports_what_it_touched_so_it_can_be_undone():
         {"code": "A1", "slots": ["月1"]},
         {"code": "B1", "slots": ["月1"]},
     ]
+
+
+def _inherit_prepare():
+    """前年度の枠が今年度の制約に触れる場面を作る。"""
+    import time as _time
+
+    from app.models.enums import Category, Department, TeacherKind, Term
+    from app.models.subject import Subject
+    from app.models.teacher import Teacher
+    from app.models.timeslot import TimeSlot
+    from app.scheduler.inherit import PreviousEntry
+    from app.session_store import SessionData, store
+
+    def sub(code, name, teacher, fixed=None):
+        return Subject(
+            code=code, name=name, base_name=name, department=Department.MANAGEMENT,
+            year=1, term=Term.SPRING, quarter=None, category=Category.REQUIRED,
+            teacher=teacher, fixed_slot=fixed,
+        )
+
+    subjects = [
+        sub("B1", "確定した科目", "専任甲", fixed=(TimeSlot("月", 1),)),
+        sub("B2", "押し出された科目", "専任甲"),
+    ]
+    session_id = store.create(SessionData(
+        subjects=subjects,
+        teachers={"専任甲": Teacher("専任甲", TeacherKind.FULL_TIME)},
+        # B2 は前年度も 月1。今年度は B1 が確定枠で 月1 を取るので戻せない。
+        previous_entries={
+            "B1": PreviousEntry((TimeSlot("月", 1),), "専任甲"),
+            "B2": PreviousEntry((TimeSlot("月", 1),), "専任甲"),
+        },
+        previous_teachers={"専任甲": Teacher("専任甲", TeacherKind.FULL_TIME)},
+    ))
+    client.post(f"/api/generate/{session_id}",
+                json={"mode": "inherit", "retarget_codes": []})
+    deadline = _time.time() + 20
+    while _time.time() < deadline:
+        if client.get(f"/api/result/{session_id}").json()["status"] == "done":
+            return session_id
+        _time.sleep(0.1)
+    raise AssertionError("生成が完了しませんでした")
+
+
+def test_the_result_says_why_a_subject_could_not_be_inherited():
+    """「制約に合いません」だけでは事務局が追えない。
+
+    どの制約に、どの科目とぶつかったのかを画面まで届ける。
+    """
+    session_id = _inherit_prepare()
+    body = client.get(f"/api/result/{session_id}").json()
+
+    skipped = body["inherit_skipped"]
+    assert len(skipped) == 1
+    entry = skipped[0]
+    assert entry["subject"]["code"] == "B2"
+    assert entry["subject"]["name"] == "押し出された科目"
+    assert entry["rule_id"] == "H1"
+    assert entry["related"]["code"] == "B1"
+    assert "専任甲" in entry["message"]
+
+
+def test_other_modes_report_no_inherit_reasons():
+    session_id = _prepare()
+    assert client.get(f"/api/result/{session_id}").json()["inherit_skipped"] == []

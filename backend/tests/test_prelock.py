@@ -78,3 +78,66 @@ def test_most_constrained_part_time_subject_is_placed_first():
     timetable, unplaced = prelock(ctx, [b, a])
     assert timetable.slot_of("A1") == (TimeSlot("金", 1),)
     assert unplaced == []
+
+
+def test_prefer_puts_a_part_time_subject_back_where_it_was_last_year():
+    """踏襲モードでは前年度と同じコマへ戻す。
+
+    事前ロックは候補の先頭（月曜 1 限寄り）を機械的に取るため、前年度と
+    別のコマを選びやすい。実データでは 133 件中 54 件が動き、そのせいで
+    前年度からいた 11 件が押し出されていた。
+    """
+    subject = make("A1", teacher="非常勤甲")
+    teacher = Teacher("非常勤甲", TeacherKind.PART_TIME,
+                      available_slots={TimeSlot("月", 1), TimeSlot("金", 3)})
+    ctx = Context.from_lists([subject], [teacher])
+
+    timetable, unplaced = prelock(ctx, [subject],
+                                  prefer={"A1": (TimeSlot("金", 3),)})
+    assert timetable.slot_of("A1") == (TimeSlot("金", 3),)
+    assert unplaced == []
+
+
+def test_prefer_falls_back_when_last_year_is_no_longer_possible():
+    """前年度のコマに今年度は出勤できないなら、従来どおり候補から選ぶ。"""
+    subject = make("A1", teacher="非常勤甲")
+    teacher = Teacher("非常勤甲", TeacherKind.PART_TIME,
+                      available_slots={TimeSlot("金", 3)})
+    ctx = Context.from_lists([subject], [teacher])
+
+    timetable, _ = prelock(ctx, [subject], prefer={"A1": (TimeSlot("月", 1),)})
+    assert timetable.slot_of("A1") == (TimeSlot("金", 3),)
+
+
+def test_prefer_never_breaks_a_constraint():
+    """前年度のコマでも、今年度の制約に触れるなら使わない。
+
+    同一非常勤が 2 科目を持ち、前年度は両方とも同じコマ（前年度の時間割が
+    H1 に触れている）という場面。2 件目は別のコマへ回る。
+    """
+    a = make("A1", teacher="非常勤甲")
+    b = make("B1", teacher="非常勤甲")
+    teacher = Teacher("非常勤甲", TeacherKind.PART_TIME,
+                      available_slots={TimeSlot("金", 1), TimeSlot("金", 2)})
+    ctx = Context.from_lists([a, b], [teacher])
+
+    timetable, unplaced = prelock(ctx, [a, b], prefer={
+        "A1": (TimeSlot("金", 1),), "B1": (TimeSlot("金", 1),),
+    })
+    assert unplaced == []
+    assert timetable.slot_of("A1") == (TimeSlot("金", 1),)
+    assert timetable.slot_of("B1") == (TimeSlot("金", 2),)
+
+
+def test_without_prefer_nothing_changes():
+    """prefer を渡さないときの結果は従来どおり。
+
+    モックと AI モードは prefer を渡さない。ここが動くと全モードに響く。
+    """
+    a = make("A1", teacher="非常勤甲")
+    teacher = Teacher("非常勤甲", TeacherKind.PART_TIME,
+                      available_slots={TimeSlot("月", 1), TimeSlot("金", 3)})
+    ctx = Context.from_lists([a], [teacher])
+
+    timetable, _ = prelock(ctx, [a])
+    assert timetable.slot_of("A1") == (TimeSlot("月", 1),), "候補の先頭を取る"
