@@ -115,3 +115,22 @@ def test_apply_plan_ignores_codes_absent_from_this_year(tmp_path):
     apply_plan(ctx, tt, plan, logger)
     assert tt.placed_codes() == set()
     logger.close()
+
+
+def test_apply_plan_leaves_a_subject_that_became_intensive_off_the_grid(tmp_path):
+    """今年度は集中講義になった科目を、前年度の枠へ戻さない。
+
+    実データで起きた：J19901 模擬ブライダルプロジェクトは今年度 時限99
+    （集中）だが前年度は 水5 に入っており、踏襲がグリッドへ載せていた。
+    集中講義は別枠の一覧にも出るため、同じ科目が 2 か所に現れる。
+    """
+    subject = make("A1", is_intensive=True)
+    context = Context.from_lists([subject], [])
+    timetable = Timetable()
+    plan = InheritPlan({"A1": PreviousEntry((TimeSlot("水", 5),), "専任甲")}, set())
+
+    logger = SessionLogger("intensive", log_dir=tmp_path)
+    apply_plan(context, timetable, plan, logger)
+    logger.close()
+
+    assert timetable.is_placed("A1") is False

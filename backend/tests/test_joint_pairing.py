@@ -5,7 +5,7 @@ from app.ingest.joint_pairing import assign_joint_ids
 from app.models.enums import Category, Department, Term
 from app.models.subject import Subject
 
-CURRICULUM_XLSX = Path(__file__).resolve().parents[2] / "カリキュラム一覧(整形済み).xlsx"
+from tests.conftest import CURRICULUM_XLSX  # noqa: E402
 
 
 def _subject(code, base_name, department, term, teacher, is_joint=True):

@@ -25,8 +25,21 @@ def isolated_storage(tmp_path_factory, monkeypatch):
 
 
 _ROOT = Path(__file__).resolve().parents[2]
-CURRICULUM_XLSX = _ROOT / "カリキュラム一覧(整形済み).xlsx"
-TEACHERS_XLSX = _ROOT / "教員一覧(整形済み).xlsx"
+
+
+def find_real_workbook(prefix: str) -> Path | None:
+    """事務局から受け取った実データを名前で決め打ちにしない。
+
+    「カリキュラム一覧(整形済み).xlsx」だったり「カリキュラム一覧.xlsx」
+    だったりする。名前を直書きすると、事務局がファイルを差し替えた日に
+    テストが「見つからない」で落ちる。実際に起きた。
+    """
+    found = sorted(_ROOT.glob(f"{prefix}*.xlsx"))
+    return found[0] if found else None
+
+
+CURRICULUM_XLSX = find_real_workbook("カリキュラム一覧")
+TEACHERS_XLSX = find_real_workbook("教員一覧")
 
 
 @pytest.fixture(scope="session")
@@ -37,6 +50,8 @@ def real_context() -> Context:
     呼び忘れて本番と違う条件でテストが走った。link_subjects を通せば
     その取りこぼしが起きない。
     """
+    if CURRICULUM_XLSX is None or TEACHERS_XLSX is None:
+        pytest.skip("実データが置かれていない環境では飛ばす")
     subjects = read_curriculum(CURRICULUM_XLSX)
     link_subjects(subjects)
     return Context.from_lists(subjects, read_teachers(TEACHERS_XLSX))

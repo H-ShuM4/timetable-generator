@@ -13,8 +13,8 @@ from app.scheduler.pipeline import GenerationResult
 from app.session_store import SessionData, SessionStore
 
 _ROOT = Path(__file__).resolve().parents[2]
-CURRICULUM = _ROOT / "カリキュラム一覧(整形済み).xlsx"
-TEACHERS = _ROOT / "教員一覧(整形済み).xlsx"
+from tests.conftest import CURRICULUM_XLSX as CURRICULUM  # noqa: E402
+from tests.conftest import TEACHERS_XLSX as TEACHERS  # noqa: E402
 
 
 @pytest.fixture

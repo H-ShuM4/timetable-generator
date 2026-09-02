@@ -94,6 +94,12 @@ def apply_plan(
         subject = context.subjects.get(code)
         if subject is None or timetable.is_placed(code):
             continue
+        # 今年度は集中講義になった科目を、前年度の枠へ戻さない。集中は
+        # グリッド対象外で別枠の一覧に出るため、載せると同じ科目が 2 か所に
+        # 現れる。実データの J19901 模擬ブライダルプロジェクトがこれで、
+        # 今年度は時限99 なのに前年度の 水5 へ置かれていた。
+        if subject.is_intensive:
+            continue
         if not is_allowed(context, timetable, subject, previous.slots):
             logger.warn(
                 f"前年度の配置が今年度の制約に合いません: {subject.name}",

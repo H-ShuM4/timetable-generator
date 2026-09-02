@@ -5,7 +5,7 @@ from app.ingest.teacher_reader import parse_available_slots, parse_days, read_te
 from app.models.enums import TeacherKind
 from app.models.timeslot import TimeSlot
 
-TEACHER_XLSX = Path(__file__).resolve().parents[2] / "教員一覧(整形済み).xlsx"
+from tests.conftest import TEACHERS_XLSX as TEACHER_XLSX  # noqa: E402
 
 
 def test_parse_available_slots_single():

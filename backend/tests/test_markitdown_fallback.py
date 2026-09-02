@@ -11,7 +11,7 @@ from app.ingest.markitdown_fallback import (
 )
 from app.logging.session_logger import SessionLogger
 
-CURRICULUM_XLSX = Path(__file__).resolve().parents[2] / "カリキュラム一覧(整形済み).xlsx"
+from tests.conftest import CURRICULUM_XLSX  # noqa: E402
 
 
 def _write_broken_workbook(path):

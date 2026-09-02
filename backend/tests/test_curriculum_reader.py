@@ -4,7 +4,7 @@ from app.ingest.curriculum_reader import read_curriculum, to_base_name
 from app.models.enums import Category, Department, Quarter, Term
 from app.models.timeslot import TimeSlot
 
-CURRICULUM_XLSX = Path(__file__).resolve().parents[2] / "カリキュラム一覧(整形済み).xlsx"
+from tests.conftest import CURRICULUM_XLSX  # noqa: E402
 
 
 def test_to_base_name_strips_accounting_suffix():

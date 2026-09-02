@@ -79,11 +79,8 @@ def live_server(tmp_path_factory) -> str:
 @pytest.fixture(scope="session")
 def sample_xlsx() -> list[Path]:
     """事務局が実際に投入している 2 本。ユニットテストと同じ実データ。"""
-    files = [
-        ROOT / "カリキュラム一覧(整形済み).xlsx",
-        ROOT / "教員一覧(整形済み).xlsx",
-    ]
-    for path in files:
-        if not path.exists():
-            pytest.skip(f"{path.name} が無い環境では E2E を飛ばす")
-    return files
+    from tests.conftest import CURRICULUM_XLSX, TEACHERS_XLSX
+
+    if CURRICULUM_XLSX is None or TEACHERS_XLSX is None:
+        pytest.skip("実データが無い環境では E2E を飛ばす")
+    return [CURRICULUM_XLSX, TEACHERS_XLSX]

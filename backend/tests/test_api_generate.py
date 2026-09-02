@@ -148,3 +148,53 @@ def test_a_cancelled_run_is_not_reported_as_a_failure(real_context):
     assert body["status"] == "cancelled"
     assert body["error"] is None
     assert body["placements"] == [], "中止したら結果は残さない"
+
+
+def _inherit_session(monkeypatch):
+    """前年度の配置を持つ小さなセッション。"""
+    from app.models.enums import Category, Department, Term
+    from app.models.subject import Subject
+    from app.models.timeslot import TimeSlot
+    from app.scheduler.inherit import PreviousEntry
+    from app.session_store import SessionData, store
+
+    subjects = [
+        Subject(
+            code=f"A{i}", name=f"科目{i}", base_name=f"科目{i}",
+            department=Department.MANAGEMENT, year=1, term=Term.SPRING, quarter=None,
+            category=Category.REQUIRED, teacher=f"専任{i}",
+        )
+        for i in range(3)
+    ]
+    previous = {
+        f"A{i}": PreviousEntry((TimeSlot("木", i + 1),), f"専任{i}") for i in range(3)
+    }
+    return store.create(SessionData(
+        subjects=subjects, teachers={}, previous_entries=previous,
+    ))
+
+
+def test_inherit_still_inherits_without_an_api_key(monkeypatch, tmp_path):
+    """踏襲モードは Gemini を要らない。API キーが無いだけで捨てない。
+
+    実データで起きた：キー未設定のまま踏襲モードを選ぶと、モックへ落とされて
+    inherit_plan が組まれず、1 件も引き継がれないまま普通の生成になっていた。
+    ログには「モックモードで実行します」としか出ないので気づけない。
+    """
+    import app.api.generate as generate_api
+    from app.settings_store import SettingsStore
+
+    monkeypatch.setattr(
+        generate_api, "settings_store",
+        SettingsStore(tmp_path / ".env", tmp_path / "settings.json"),
+    )
+    session_id = _inherit_session(monkeypatch)
+    response = client.post(
+        f"/api/generate/{session_id}", json={"mode": "inherit", "retarget_codes": []}
+    )
+    assert response.status_code == 202
+    assert response.json()["mode"] == "inherit", "踏襲モードのまま走ること"
+
+    body = _wait_for_completion(session_id)
+    sources = {p["code"]: p["source"] for p in body["placements"]}
+    assert sources == {"A0": "inherited", "A1": "inherited", "A2": "inherited"}

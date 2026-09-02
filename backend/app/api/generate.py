@@ -76,12 +76,21 @@ async def start_generation(session_id: str, payload: GenerateIn) -> dict:
 
     logger = SessionLogger(session_id)
     cancel = threading.Event()
-    if mode is not GenerationMode.MOCK and not api_key:
+    # **踏襲モードは Gemini を要らない。** 前年度の配置をそのまま置くのは
+    # 決定的な処理で、組み替え対象はソルバーが埋められる。以前はここで
+    # 「MOCK 以外」をまとめて落としており、キーが無いだけで踏襲が捨てられ、
+    # inherit_plan が組まれないまま普通の生成になっていた。ログには
+    # 「モックモードで実行します」としか出ないので、事務局は気づけない。
+    if mode is GenerationMode.OPTIMIZE and not api_key:
         logger.warn("API キーが未設定のためモックモードで実行します", stage="Stage 0")
         mode = GenerationMode.MOCK
+    if mode is GenerationMode.INHERIT and not api_key:
+        logger.info(
+            "API キーが未設定のため、組み替え対象はソルバーが配置します", stage="Stage 0"
+        )
 
     placer = None
-    if mode is not GenerationMode.MOCK:
+    if mode is not GenerationMode.MOCK and api_key:
         models = settings.models_in_order()
 
         def announce_switch(left: str, next_model: str | None, error: Exception) -> None:

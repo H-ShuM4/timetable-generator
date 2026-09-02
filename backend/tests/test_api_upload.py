@@ -6,8 +6,8 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 ROOT = Path(__file__).resolve().parents[2]
-CURRICULUM = ROOT / "カリキュラム一覧(整形済み).xlsx"
-TEACHERS = ROOT / "教員一覧(整形済み).xlsx"
+from tests.conftest import CURRICULUM_XLSX as CURRICULUM  # noqa: E402
+from tests.conftest import TEACHERS_XLSX as TEACHERS  # noqa: E402
 
 client = TestClient(app)
 
