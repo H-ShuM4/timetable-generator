@@ -381,11 +381,14 @@ table.timetable td.dragover { background: var(--indigo-wash); box-shadow: inset 
 .card {
   position: relative;
   display: grid;
-  grid-template-columns: 3px auto 1fr;
+  /* レールは色（配置元）と塗り分け（開講期間）の 2 つを担うので、
+     細すぎると読み取れない。広げた分は列の間隔から返してもらい、
+     科目名の幅は変えない（レール +2px、間隔 2 つで -2px）。 */
+  grid-template-columns: 5px auto 1fr;
   grid-template-areas:
     "rail year name"
     "rail meta meta";
-  column-gap: 0.375rem;
+  column-gap: 0.3125rem;
   align-items: baseline;
   padding: 0.25rem 0.375rem 0.25rem 0;
   margin-bottom: 0.1875rem;
