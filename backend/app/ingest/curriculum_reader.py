@@ -12,14 +12,16 @@ import openpyxl
 from app.ingest.department_rules import RULES
 from app.ingest.name_normalizer import normalize_name
 from app.models.enums import Category, Department, Quarter, Term
-from app.models.subject import Subject
+from app.models.subject import (
+    ACCOUNTING_SUFFIX,
+    DOUBLE_SLOT_MARKER,
+    RETAKE_MARKER,
+    Subject,
+)
 from app.models.timeslot import INTENSIVE_PERIOD, TimeSlot
 
 _CONFIG_DIR = Path(__file__).resolve().parents[2] / "config"
 
-DOUBLE_SLOT_MARKER = "▲"
-ACCOUNTING_SUFFIX = ":会"
-RETAKE_MARKER = "【再】"
 REMOTE_YES = "○"
 REMOTE_NO = "×"
 INTENSIVE_DAY = "集中"

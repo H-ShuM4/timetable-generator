@@ -125,3 +125,21 @@ def test_paired_members_always_span_both_departments():
 def test_real_workbook_has_no_flag_mismatch():
     subjects = read_curriculum(CURRICULUM_XLSX)
     assert assign_joint_ids(subjects) == []
+
+
+def test_class_markers_still_separate_the_joint_pairs():
+    """合同ペアリングは base_name を見る。クラス記号を残す判断の網。
+
+    経営の英語Ⅰ【A】と会計の英語Ⅰ【A】を組にしたいので、ここでクラス記号を
+    外すと別クラス同士が誤って組になる。学生側の衝突判定だけが class_group を見る。
+    """
+    subjects = read_curriculum(CURRICULUM_XLSX)
+    assign_joint_ids(subjects)
+    groups = {}
+    for subject in subjects:
+        if subject.joint_id:
+            groups.setdefault(subject.joint_id, []).append(subject)
+
+    assert len(groups) == 107
+    assert sum(len(g) for g in groups.values()) == 214
+    assert {len(g) for g in groups.values()} == {2}

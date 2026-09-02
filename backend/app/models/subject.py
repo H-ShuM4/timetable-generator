@@ -1,8 +1,20 @@
 """科目 1 件を表すデータクラス。仕様書 §5.1 に対応する。"""
+import re
 from dataclasses import dataclass, field
 
 from app.models.enums import Category, Department, Quarter, Term
 from app.models.timeslot import TimeSlot
+
+DOUBLE_SLOT_MARKER = "▲"
+ACCOUNTING_SUFFIX = ":会"
+RETAKE_MARKER = "【再】"
+
+CLASS_MARKER = re.compile(r"【[A-Za-zＡ-Ｚａ-ｚ]】")
+"""クラス分けの記号。英語Ⅰ【A】〜【E】のように 1 科目を教員ごとに割った印。
+
+**英字 1 文字だけを対象にする。** 【留学生】のような括弧は履修する集団が
+違うのであって、同じ科目のクラス分けではない。
+"""
 
 
 @dataclass(slots=True)
@@ -61,3 +73,27 @@ class Subject:
     requires_consecutive: bool = False
     fixed_slot: tuple[TimeSlot, ...] | None = None
     is_intensive: bool = False
+
+    @property
+    def is_retake(self) -> bool:
+        """再履修クラスか。
+
+        1 年次に落単した学生が履修するため、配当年次は 1 年でも実際に
+        受けるのは 2 年生以降になる。**同じ年次の集団には属さない**ので、
+        年次に由来する制約（H2・H3 の学生衝突、H13 の朝学習）から外れる。
+        ただし【再】同士は互いに衝突する（2 科目を同時に再履修する学生がいる）。
+        """
+        return RETAKE_MARKER in self.name
+
+    @property
+    def class_group(self) -> str:
+        """同じ科目の複数クラスをまとめる名前。
+
+        英語Ⅰ【A】と英語Ⅰ【B】はここで一致する。学生が履修するのは
+        そのうち一つなので、同一コマに集約してよい（H2・H3 の除外）。
+
+        **`base_name` とは粒度が違う。** 合同ペアリングは経営の
+        英語Ⅰ【A】と会計の英語Ⅰ【A】を組にしたいのでクラス記号が要る。
+        クラス記号を外すのは学生側の衝突判定だけにする。
+        """
+        return CLASS_MARKER.sub("", self.base_name).strip()

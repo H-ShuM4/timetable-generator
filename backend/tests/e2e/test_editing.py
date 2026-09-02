@@ -28,9 +28,14 @@ def test_undo_puts_the_card_back_where_it_came_from(page: Page, live_server, sam
     # 動かせる組み合わせを先に 1 つ見つけてから、その 1 手をドラッグで行う。
     # 確かめたいのは制約の判定ではなく、掴んで落として取り消せることである。
     #
-    # **1 コマに 1 枚しか無いカードを選ぶ。** 9 枚が重なるコマもあり、
+    # **1 コマに 1 枚しか無いカードを選ぶ。** 16 枚が重なるコマもあり、
     # ドラッグの当たり判定は目当てのカードではなく手前の 1 枚を掴む。
     # 実際それで別の科目（B53901）が飛んでテストが落ちた。
+    #
+    # **落とし先は同じ限の行に限る。** グリッドは内側でスクロールし、
+    # 高さ 1700px に対して見えているのは 480px ほどしかない。行が違うと
+    # 掴む位置と落とす位置を同時に画面へ出せず、合成ドラッグが届かない
+    # （実際に 火1→月5 で落ちた）。同じ行なら縦位置が揃うので確実に届く。
     target = page.evaluate("""async () => {
       const views = [["経営","前期"],["会計","前期"],["短期大学部","前期"],
                      ["経営","後期"],["会計","後期"],["短期大学部","後期"]];
@@ -43,7 +48,8 @@ def test_undo_puts_the_card_back_where_it_came_from(page: Page, live_server, sam
         const lone = cells.filter((td) => td.querySelectorAll(".card").length === 1)
                           .map((td) => td.querySelector(".card"));
         for (const card of lone) {
-          for (const slot of empty) {
+          const period = card.dataset.grabbed.slice(1);
+          for (const slot of empty.filter((s) => s.slice(1) === period)) {
             const body = await api.moveSubject(
               window.appState.sessionId, card.dataset.code, [slot]);
             if (body.applied) {

@@ -154,3 +154,41 @@ def test_the_accounting_wednesday_is_fixed_from_the_department_rules():
     others = [s for s in same_name if s.department is not Department.ACCOUNTING]
     assert others, "他学科に同名の科目が無いと、この絞り込みを検証できない"
     assert all(s.fixed_slot is None for s in others), [s.code for s in others]
+
+
+def test_class_markers_are_stripped_for_the_student_conflict_check():
+    """英語Ⅰ【A】と英語Ⅰ【B】は 1 科目の複数クラス。
+
+    base_name はクラス記号を残す（合同ペアリングが経営の【A】と会計の
+    【A】を組にするため）。学生側の衝突判定だけが class_group を見る。
+    """
+    subjects = read_curriculum(CURRICULUM_XLSX)
+    english = [s for s in subjects if s.base_name.startswith("英語Ⅰ【")]
+    assert english, "クラス記号付きの英語Ⅰが実データに無い"
+    assert {s.class_group for s in english} == {"英語Ⅰ"}
+    assert len({s.base_name for s in english}) > 1, "base_name は分かれたまま"
+
+
+def test_a_multi_character_bracket_is_not_a_class_marker():
+    """【留学生】は履修する集団が違うのであって、クラス分けではない。"""
+    subjects = read_curriculum(CURRICULUM_XLSX)
+    foreign = [s for s in subjects if "【留学生】" in s.name]
+    assert foreign, "【留学生】が実データに無い"
+    for subject in foreign:
+        assert "【留学生】" in subject.class_group
+
+
+def test_a_retake_class_is_flagged_and_shares_the_subject_name():
+    subjects = read_curriculum(CURRICULUM_XLSX)
+    retake = [s for s in subjects if s.is_retake]
+    assert len(retake) == 19
+    assert all("【再】" in s.name for s in retake)
+
+    literacy = next(s for s in retake if s.name.startswith("日本語リテラシーⅠ【再】"))
+    assert literacy.class_group == "日本語リテラシーⅠ"
+    assert literacy.year == 1, "配当年次は 1 年のまま（受けるのは 2 年生以降）"
+
+
+def test_a_regular_class_is_not_flagged_as_a_retake():
+    subjects = read_curriculum(CURRICULUM_XLSX)
+    assert not any(s.is_retake for s in subjects if "【再】" not in s.name)

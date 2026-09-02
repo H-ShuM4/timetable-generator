@@ -200,7 +200,13 @@ def check_h13(
 
     担当教員の出勤可能コマがすべて朝学習に重なる場合は、この規則が譲る
     （`morning_study_yields_to_availability` 参照）。
+
+    **【再】には掛からない。** 朝学習は 1 年生の運用で、再履修クラスを
+    受けるのは 2 年生以降だからである。実データでは 会計1年【再】13 件が
+    この規則で月火木金の 1 限から締め出されていた。
     """
+    if subject.is_retake:
+        return []
     if morning_study_yields_to_availability(context, subject):
         return []
     return [

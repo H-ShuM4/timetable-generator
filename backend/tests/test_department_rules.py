@@ -141,3 +141,36 @@ def test_the_fixed_slot_alone_never_trips_the_limit():
 def test_a_missing_config_disables_the_rules(tmp_path):
     rules = load_department_rules(tmp_path / "absent.json")
     assert rules.morning_study == [] and rules.fixed_days == []
+
+
+def test_a_retake_class_is_not_bound_by_the_morning_study_hour():
+    """朝学習は 1 年生の運用。【再】を履修するのは 2 年生以降なので掛からない。
+
+    実データの 会計1年【再】13 件が、この規則で月火木金の 1 限から
+    締め出されていた。前年度は 日本語リテラシーⅠ【再】:会 を 月1 に置いている。
+    """
+    subject = accounting("A1", name="日本語リテラシーⅠ【再】:会",
+                         base_name="日本語リテラシーⅠ")
+    ctx = Context.from_lists([subject], [])
+    for day in ("月", "火", "木", "金"):
+        assert check_h13(ctx, Timetable(), subject, (TimeSlot(day, 1),)) == [], day
+
+
+def test_a_regular_class_is_still_bound_by_the_morning_study_hour():
+    """緩めすぎていないことの網。【再】でなければ従来どおり掛かる。"""
+    subject = accounting("A2", name="日本語リテラシーⅠ:会", base_name="日本語リテラシーⅠ")
+    ctx = Context.from_lists([subject], [])
+    assert [v.rule_id for v in
+            check_h13(ctx, Timetable(), subject, (TimeSlot("月", 1),))] == ["H13"]
+
+
+def test_the_wednesday_block_still_pins_the_retake_classes():
+    """水曜の枠は事務局が科目名で明示指定したもの。【再】も含めたまま。
+
+    base_name で突合するので、通常クラスと【再】クラスが同じコマに入る。
+    朝学習と違い、これは意図した運用なので変えない。
+    """
+    from app.ingest.curriculum_reader import _fixed_slot
+
+    slot = _fixed_slot(None, Department.ACCOUNTING, 1, "商業簿記Ⅰ", 1)
+    assert slot == (TimeSlot("水", 1),)
