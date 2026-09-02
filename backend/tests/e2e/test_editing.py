@@ -32,10 +32,11 @@ def test_undo_puts_the_card_back_where_it_came_from(page: Page, live_server, sam
     # ドラッグの当たり判定は目当てのカードではなく手前の 1 枚を掴む。
     # 実際それで別の科目（B53901）が飛んでテストが落ちた。
     #
-    # **落とし先は同じ限の行に限る。** グリッドは内側でスクロールし、
-    # 高さ 1700px に対して見えているのは 480px ほどしかない。行が違うと
-    # 掴む位置と落とす位置を同時に画面へ出せず、合成ドラッグが届かない
-    # （実際に 火1→月5 で落ちた）。同じ行なら縦位置が揃うので確実に届く。
+    # **掴む位置と落とす位置が縦に近いものを選ぶ。** グリッドは内側で
+    # スクロールし、高さ 1700px に対して見えているのは 480px ほどしかない。
+    # 離れていると両方を同時に画面へ出せず、合成ドラッグが届かない
+    # （実際に 火1→月5 で落ちた）。1 コマに 16 枚入る行もあるので、
+    # 同じ限の行というだけでは足りず、実際の座標で測って選ぶ。
     target = page.evaluate("""async () => {
       const views = [["経営","前期"],["会計","前期"],["短期大学部","前期"],
                      ["経営","後期"],["会計","後期"],["短期大学部","後期"]];
@@ -47,9 +48,19 @@ def test_undo_puts_the_card_back_where_it_came_from(page: Page, live_server, sam
                            .map((td) => td.dataset.slot);
         const lone = cells.filter((td) => td.querySelectorAll(".card").length === 1)
                           .map((td) => td.querySelector(".card"));
+        const middle = (el) => {
+          const r = el.getBoundingClientRect();
+          return r.top + r.height / 2;
+        };
         for (const card of lone) {
-          const period = card.dataset.grabbed.slice(1);
-          for (const slot of empty.filter((s) => s.slice(1) === period)) {
+          // 縦に近い空きコマから試す。同時に画面へ出せる相手を先に見つける。
+          const near = cells
+            .filter((td) => !td.querySelector(".card"))
+            .map((td) => ({ slot: td.dataset.slot,
+                            gap: Math.abs(middle(td) - middle(card)) }))
+            .filter((x) => x.gap < 300)
+            .sort((a, b) => a.gap - b.gap);
+          for (const { slot } of near) {
             const body = await api.moveSubject(
               window.appState.sessionId, card.dataset.code, [slot]);
             if (body.applied) {

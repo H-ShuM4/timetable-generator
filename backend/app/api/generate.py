@@ -132,8 +132,15 @@ async def start_generation(session_id: str, payload: GenerateIn) -> dict:
 
     inherit_plan = None
     if mode is GenerationMode.INHERIT:
-        retarget = set(payload.retarget_codes) or detect_retarget_codes(
-            data.subjects, data.teachers, data.previous_entries, data.previous_teachers
+        # 空リスト（すべて解除）と未指定を取り違えない。前者は「何も
+        # 組み替えない」、後者は「自動検出に任せる」である。
+        retarget = (
+            set(payload.retarget_codes)
+            if payload.retarget_codes is not None
+            else detect_retarget_codes(
+                data.subjects, data.teachers,
+                data.previous_entries, data.previous_teachers,
+            )
         )
         inherit_plan = InheritPlan(data.previous_entries, retarget)
 

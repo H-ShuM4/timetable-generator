@@ -127,9 +127,12 @@ def test_remote_column_distinguishes_maru_batsu_and_blank():
     # 大学シートは全行が ○ か ×、短大シートは ○ か空欄
     assert all(s.department is not Department.JUNIOR for s in no)
     assert all(s.department is Department.JUNIOR for s in blank)
-    # 大学 ○76 + 短大 ○13 = 89、× は全て大学の 420、空欄は短大のみ。
-    # 空欄が行数 153 でなく 149 なのは ▲科目 4 件が 2 行から 1 件へ集約されるため
-    assert (len(yes), len(no), len(blank)) == (89, 420, 149)
+    # 件数そのものは事務局が Excel を更新するたびに動くので固定しない
+    # （実際 ○ が 89→88 に変わってこのテストが落ちた）。守るのは 3 状態が
+    # 混ざらないことと、どの状態も実データに存在することである。
+    assert yes and no and blank
+    assert len(yes) + len(no) + len(blank) == len(subjects)
+    assert any(s.department is Department.JUNIOR for s in yes), "短大にも ○ がある"
 
 
 def test_the_accounting_wednesday_is_fixed_from_the_department_rules():

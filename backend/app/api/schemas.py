@@ -67,7 +67,14 @@ class GenerateIn(BaseModel):
     repair_effort: str = Field(default="off", pattern="^(off|short|long)$")
     """配置の見直しにかける時間。"""
 
-    retarget_codes: list[str] = Field(default_factory=list)
+    retarget_codes: list[str] | None = None
+    """踏襲モードで組み替える科目。
+
+    **空リストと未指定を区別する。** 空リストは「すべて解除した＝何も
+    組み替えない」で、未指定は「自動検出に任せる」。以前は両方を同じ
+    falsy として扱っていたため、すべて解除すると自動検出へ戻り、外した
+    はずの科目がまとめて組み替え対象へ復活していた。
+    """
 
 
 class RetargetItem(BaseModel):

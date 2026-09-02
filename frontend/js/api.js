@@ -54,7 +54,8 @@ const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         mode,
-        retarget_codes: retargetCodes || [],
+        // null は「自動検出に任せる」。空配列は「すべて解除」で意味が違う。
+        retarget_codes: retargetCodes ?? null,
         weights: weights || {},
         repair_effort: repairEffort || "off",
       }),

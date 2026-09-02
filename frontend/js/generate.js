@@ -276,9 +276,11 @@ async function startGeneration() {
   document.getElementById("cancel-button").scrollIntoView({ block: "center" });
 
   try {
+    // 組み替え対象は踏襲モードでしか意味を持たない。他のモードでは
+    // null を送り、サーバ側の自動検出に触れないようにする。
+    const retarget = selectedMode() === "inherit" ? checkedRetargetCodes() : null;
     const body = await api.startGeneration(
-      sessionId, selectedMode(), checkedRetargetCodes(),
-      selectedWeights(), selectedEffort()
+      sessionId, selectedMode(), retarget, selectedWeights(), selectedEffort()
     );
     if (body.mode !== selectedMode()) {
       const label = MODE_LABELS[body.mode] || body.mode;

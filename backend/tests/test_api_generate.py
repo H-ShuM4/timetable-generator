@@ -150,12 +150,14 @@ def test_a_cancelled_run_is_not_reported_as_a_failure(real_context):
     assert body["placements"] == [], "中止したら結果は残さない"
 
 
+from app.scheduler.inherit import PreviousEntry  # noqa: E402
+
+
 def _inherit_session(monkeypatch):
     """前年度の配置を持つ小さなセッション。"""
     from app.models.enums import Category, Department, Term
     from app.models.subject import Subject
     from app.models.timeslot import TimeSlot
-    from app.scheduler.inherit import PreviousEntry
     from app.session_store import SessionData, store
 
     subjects = [
@@ -198,3 +200,72 @@ def test_inherit_still_inherits_without_an_api_key(monkeypatch, tmp_path):
     body = _wait_for_completion(session_id)
     sources = {p["code"]: p["source"] for p in body["placements"]}
     assert sources == {"A0": "inherited", "A1": "inherited", "A2": "inherited"}
+
+
+def _inherit_session_with_a_part_timer(monkeypatch):
+    """自動検出が 1 件を組み替え対象にするセッション。
+
+    A0 の担当を非常勤にしておく。こうしないと自動検出も空になり、
+    「すべて解除」との違いが観測できない。
+    """
+    from app.models.enums import TeacherKind
+    from app.models.teacher import Teacher
+    from app.models.timeslot import TimeSlot
+    from app.session_store import store
+
+    session_id = _inherit_session(monkeypatch)
+    data = store.get(session_id)
+    data.subjects[0].teacher = "非常勤甲"
+    data.teachers["非常勤甲"] = Teacher(
+        "非常勤甲", TeacherKind.PART_TIME, available_slots={TimeSlot("木", 1)}
+    )
+    data.previous_entries["A0"] = PreviousEntry((TimeSlot("木", 1),), "非常勤甲")
+    return session_id
+
+
+def test_clearing_every_retarget_box_inherits_everything(monkeypatch, tmp_path):
+    """「すべて解除」したら、何も組み替えずに前年度どおりにする。
+
+    以前は空リストが falsy だったため自動検出へ戻り、外したはずの科目が
+    まとめて組み替え対象へ復活していた。実データでは 189 件全部が戻る。
+    """
+    import app.api.generate as generate_api
+    from app.settings_store import SettingsStore
+
+    monkeypatch.setattr(
+        generate_api, "settings_store",
+        SettingsStore(tmp_path / ".env", tmp_path / "settings.json"),
+    )
+    session_id = _inherit_session_with_a_part_timer(monkeypatch)
+    client.post(f"/api/generate/{session_id}",
+                json={"mode": "inherit", "retarget_codes": []})
+
+    body = _wait_for_completion(session_id)
+    # 「組み替えられていない」の実質はコマ。非常勤は Stage 1 で確定するので
+    # 配置元は prelock になるが、コマは前年度のままでなければならない。
+    assert _slots_of(body) == {"A0": ["木1"], "A1": ["木2"], "A2": ["木3"]}
+
+
+def test_omitting_the_retarget_list_falls_back_to_auto_detection(monkeypatch, tmp_path):
+    """指定しなかった場合は従来どおり自動検出する。
+
+    空リスト（すべて解除）と、指定なしを区別する必要がある。
+    """
+    import app.api.generate as generate_api
+    from app.settings_store import SettingsStore
+
+    monkeypatch.setattr(
+        generate_api, "settings_store",
+        SettingsStore(tmp_path / ".env", tmp_path / "settings.json"),
+    )
+    session_id = _inherit_session_with_a_part_timer(monkeypatch)
+    client.post(f"/api/generate/{session_id}", json={"mode": "inherit"})
+
+    body = _wait_for_completion(session_id)
+    sources = {p["code"]: p["source"] for p in body["placements"]}
+    assert sources["A0"] != "inherited", "自動検出では非常勤が組み替え対象になる"
+    assert sources["A1"] == "inherited"
+
+
+def _slots_of(body):
+    return {p["code"]: p["slots"] for p in body["placements"]}
