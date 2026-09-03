@@ -72,88 +72,15 @@ async def start_generation(session_id: str, payload: GenerateIn) -> dict:
 
     settings = settings_store.load()
     api_key = settings_store.get_api_key()
-    mode = GenerationMode(payload.mode)
 
     logger = SessionLogger(session_id)
     cancel = threading.Event()
-    # **踏襲モードは Gemini を要らない。** 前年度の配置をそのまま置くのは
-    # 決定的な処理で、組み替え対象はソルバーが埋められる。以前はここで
-    # 「MOCK 以外」をまとめて落としており、キーが無いだけで踏襲が捨てられ、
-    # inherit_plan が組まれないまま普通の生成になっていた。ログには
-    # 「モックモードで実行します」としか出ないので、事務局は気づけない。
-    if mode is GenerationMode.OPTIMIZE and not api_key:
-        logger.warn("API キーが未設定のためモックモードで実行します", stage="Stage 0")
-        mode = GenerationMode.MOCK
-    # 踏襲モードで組み替え対象を誰に任せるかは事務局が決める。既定はソルバー。
-    # キーがあるだけで Gemini に渡ると、数十分と無料枠を黙って使ってしまう。
-    wants_ai = mode is GenerationMode.OPTIMIZE or (
-        mode is GenerationMode.INHERIT and payload.retarget_with == "ai"
+
+    mode, use_ai = _decide_engine(GenerationMode(payload.mode), payload, api_key, logger)
+    placer = _build_gemini_placer(settings, api_key, cancel, logger) if use_ai else None
+    inherit_plan = (
+        _build_inherit_plan(data, payload) if mode is GenerationMode.INHERIT else None
     )
-    if mode is GenerationMode.INHERIT:
-        if not wants_ai:
-            logger.info("組み替え対象はソルバーが配置します", stage="Stage 0")
-        elif not api_key:
-            logger.warn(
-                "API キーが未設定のため、組み替え対象はソルバーが配置します",
-                stage="Stage 0",
-            )
-        else:
-            logger.info("組み替え対象は AI が配置します", stage="Stage 0")
-
-    placer = None
-    if wants_ai and api_key:
-        models = settings.models_in_order()
-
-        def announce_switch(left: str, next_model: str | None, error: Exception) -> None:
-            from app.gemini.client import ModelBusyError
-
-            reason = "混み合っています" if isinstance(error, ModelBusyError) else "利用枠に達しました"
-            destination = (
-                f"{next_model} に切り替えます" if next_model
-                else "切り替え先がもうありません"
-            )
-            logger.warn(f"{left} が{reason}。{destination}", stage="Gemini")
-
-        try:
-            gemini_client = RotatingGeminiClient(
-                lambda model: RealGeminiClient(api_key, model),
-                models,
-                on_switch=announce_switch,
-            )
-            # RealGeminiClient は生成時に API キーを検証するため、
-            # ここで先頭のモデルを 1 つ作って不正なキーを早期に弾く。
-            RealGeminiClient(api_key, models[0])
-        except Exception as error:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Gemini クライアントの初期化に失敗しました。"
-                    f"API キーが不正である可能性があります: {error}"
-                ),
-            ) from error
-        if len(models) > 1:
-            logger.info(
-                f"モデルを {len(models)} 個使います（枠切れ時に順に切り替え）: "
-                f"{'→'.join(models)}",
-                stage="Stage 0",
-            )
-        placer = make_gemini_placer(
-            gemini_client, settings.max_retries, should_cancel=lambda: cancel.is_set()
-        )
-
-    inherit_plan = None
-    if mode is GenerationMode.INHERIT:
-        # 空リスト（すべて解除）と未指定を取り違えない。前者は「何も
-        # 組み替えない」、後者は「自動検出に任せる」である。
-        retarget = (
-            set(payload.retarget_codes)
-            if payload.retarget_codes is not None
-            else detect_retarget_codes(
-                data.subjects, data.teachers,
-                data.previous_entries, data.previous_teachers,
-            )
-        )
-        inherit_plan = InheritPlan(data.previous_entries, retarget)
 
     data.logger = logger
     data.result = None
@@ -186,6 +113,109 @@ async def start_generation(session_id: str, payload: GenerateIn) -> dict:
     threading.Thread(target=worker, daemon=True).start()
     return {"status": "started", "mode": mode.value}
 
+
+def _decide_engine(
+    mode: GenerationMode, payload: GenerateIn, api_key: str | None, logger: SessionLogger
+) -> tuple[GenerationMode, bool]:
+    """実際に使うモードと、Gemini に頼むかどうかを決め、その判断をログに残す。
+
+    ここで黙って別のことをすると、事務局は結果を見ても気づけない。
+    どちらへ倒したかを必ず 1 行書く。
+
+    **踏襲モードは Gemini を要らない。** 前年度の配置をそのまま置くのは
+    決定的な処理で、組み替え対象はソルバーが埋められる。以前はここで
+    「MOCK 以外」をまとめて落としており、キーが無いだけで踏襲が捨てられ、
+    inherit_plan が組まれないまま普通の生成になっていた。ログには
+    「モックモードで実行します」としか出ないので、事務局は気づけない。
+
+    **組み替えを誰に任せるかは事務局が決める。** キーがあるだけで Gemini
+    に渡ると、数十分と無料枠を黙って使ってしまう。
+    """
+    if mode is GenerationMode.OPTIMIZE and not api_key:
+        logger.warn("API キーが未設定のためモックモードで実行します", stage="Stage 0")
+        mode = GenerationMode.MOCK
+
+    wants_ai = mode is GenerationMode.OPTIMIZE or (
+        mode is GenerationMode.INHERIT and payload.retarget_with == "ai"
+    )
+    if mode is GenerationMode.INHERIT:
+        if not wants_ai:
+            logger.info("組み替え対象はソルバーが配置します", stage="Stage 0")
+        elif not api_key:
+            logger.warn(
+                "API キーが未設定のため、組み替え対象はソルバーが配置します",
+                stage="Stage 0",
+            )
+        else:
+            logger.info("組み替え対象は AI が配置します", stage="Stage 0")
+
+    return mode, bool(wants_ai and api_key)
+
+
+def _build_gemini_placer(
+    settings, api_key: str, cancel: threading.Event, logger: SessionLogger
+):
+    """Gemini の配置係を組む。キーが不正ならここで弾く。
+
+    走り出してから 400 が返ると、事務局は生成が始まったと思って待ち続ける。
+    先頭のモデルを 1 つ作って、開始前に確かめる。
+    """
+    models = settings.models_in_order()
+
+    def announce_switch(left: str, next_model: str | None, error: Exception) -> None:
+        from app.gemini.client import ModelBusyError
+
+        reason = "混み合っています" if isinstance(error, ModelBusyError) else "利用枠に達しました"
+        destination = (
+            f"{next_model} に切り替えます" if next_model
+            else "切り替え先がもうありません"
+        )
+        logger.warn(f"{left} が{reason}。{destination}", stage="Gemini")
+
+    try:
+        gemini_client = RotatingGeminiClient(
+            lambda model: RealGeminiClient(api_key, model),
+            models,
+            on_switch=announce_switch,
+        )
+        # RealGeminiClient は生成時に API キーを検証する。
+        RealGeminiClient(api_key, models[0])
+    except Exception as error:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Gemini クライアントの初期化に失敗しました。"
+                f"API キーが不正である可能性があります: {error}"
+            ),
+        ) from error
+
+    if len(models) > 1:
+        logger.info(
+            f"モデルを {len(models)} 個使います（枠切れ時に順に切り替え）: "
+            f"{'→'.join(models)}",
+            stage="Stage 0",
+        )
+    return make_gemini_placer(
+        gemini_client, settings.max_retries, should_cancel=lambda: cancel.is_set()
+    )
+
+
+def _build_inherit_plan(data, payload: GenerateIn) -> InheritPlan:
+    """前年度をどこまで踏襲するかを決める。
+
+    **空リスト（すべて解除）と未指定を取り違えない。** 前者は「1 件も
+    組み替えない」、後者は「自動検出に任せる」である。以前は真偽値として
+    見ていたため、事務局がチェックを全部外すと自動検出に化けていた。
+    """
+    retarget = (
+        set(payload.retarget_codes)
+        if payload.retarget_codes is not None
+        else detect_retarget_codes(
+            data.subjects, data.teachers,
+            data.previous_entries, data.previous_teachers,
+        )
+    )
+    return InheritPlan(data.previous_entries, retarget)
 
 @router.post("/generate/{session_id}/cancel", status_code=202)
 async def cancel_generation(session_id: str) -> dict:
