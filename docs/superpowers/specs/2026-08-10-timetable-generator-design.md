@@ -725,7 +725,7 @@ Project_3/
 ├── setup.bat / start.bat                # 事務局 PC（Windows）
 ├── start.sh                             # 開発機（Linux/WSL）
 ├── make-dist.sh                         # 配布用 zip の作成
-└── README.txt                           # 事務局向け取扱説明書
+└── README.md                            # 取扱説明書（事務局向け ＋ 開発者向け）
 ```
 
 配布用 zip に入れるのはアプリ・設定・フロントエンド・起動スクリプト・README だけで、仮想環境・テスト・ドキュメント・API キー・実行時に生成される一切を除く。`make-dist.sh` は `.env`・`.venv`・`data`・`logs`・`tests` のどれかが混ざっていたらビルドを中止する。

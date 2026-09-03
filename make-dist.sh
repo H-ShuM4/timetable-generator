@@ -23,7 +23,7 @@ cp -r backend/app "$DEST/backend/app"
 cp -r backend/config "$DEST/backend/config"
 cp backend/requirements.txt "$DEST/backend/"
 cp -r frontend "$DEST/frontend"
-cp setup.bat start.bat README.txt "$DEST/"
+cp setup.bat start.bat README.md "$DEST/"
 
 # Strip anything Python left behind while we were running it.
 find "$DEST" -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
