@@ -269,3 +269,65 @@ def test_omitting_the_retarget_list_falls_back_to_auto_detection(monkeypatch, tm
 
 def _slots_of(body):
     return {p["code"]: p["slots"] for p in body["placements"]}
+
+
+def _with_api_key(monkeypatch, tmp_path):
+    """API キーが設定されている状態を作る。"""
+    import app.api.generate as generate_api
+    from app.settings_store import SettingsStore
+
+    store = SettingsStore(tmp_path / ".env", tmp_path / "settings.json")
+    store.set_api_key("AIzaTESTKEY")
+    monkeypatch.setattr(generate_api, "settings_store", store)
+
+
+def test_inherit_uses_the_solver_unless_the_office_asks_for_ai(monkeypatch, tmp_path):
+    """踏襲モードで組み替えを誰にやらせるかは、事務局が決める。
+
+    キーがあるだけで Gemini に渡ると、数十分と無料枠を黙って使う。
+    前年度をなぞるのが目的なので、既定はソルバー。
+    """
+    import app.api.generate as generate_api
+
+    _with_api_key(monkeypatch, tmp_path)
+    built = []
+    monkeypatch.setattr(generate_api, "make_gemini_placer",
+                        lambda *a, **k: built.append(True) or (lambda *x: []))
+
+    session_id = _inherit_session(monkeypatch)
+    client.post(f"/api/generate/{session_id}", json={"mode": "inherit"})
+    _wait_for_completion(session_id)
+
+    assert built == [], "頼んでいないのに Gemini を組み立てている"
+
+
+def test_inherit_hands_the_retargets_to_ai_when_asked(monkeypatch, tmp_path):
+    import app.api.generate as generate_api
+
+    _with_api_key(monkeypatch, tmp_path)
+    built = []
+    monkeypatch.setattr(generate_api, "make_gemini_placer",
+                        lambda *a, **k: built.append(True) or (lambda *x: []))
+
+    session_id = _inherit_session(monkeypatch)
+    client.post(f"/api/generate/{session_id}",
+                json={"mode": "inherit", "retarget_with": "ai"})
+    _wait_for_completion(session_id)
+
+    assert built == [True], "AI を頼んだのに使われていない"
+
+
+def test_ai_mode_always_uses_ai(monkeypatch, tmp_path):
+    """AI モードの意味は変えない。retarget_with は踏襲モードだけの設定。"""
+    import app.api.generate as generate_api
+
+    _with_api_key(monkeypatch, tmp_path)
+    built = []
+    monkeypatch.setattr(generate_api, "make_gemini_placer",
+                        lambda *a, **k: built.append(True) or (lambda *x: []))
+
+    session_id = _upload_small(monkeypatch)
+    client.post(f"/api/generate/{session_id}", json={"mode": "optimize"})
+    _wait_for_completion(session_id)
+
+    assert built == [True]

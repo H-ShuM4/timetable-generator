@@ -93,6 +93,14 @@
         <p class="hint">
           チェックを付けた科目だけを組み替えます。外した科目は前年度と同じ曜日・時限に固定されます。
         </p>
+        <!-- キーがあるだけで Gemini に渡ると、数十分と無料枠を黙って使う。
+             誰に任せるかは事務局が決める。 -->
+        <label class="retarget-method">組み替えの方法
+          <select id="retarget-method">
+            <option value="solver">このパソコンで配置する（数秒）</option>
+            <option value="ai">AI に考えてもらう（数分・API キーが必要）</option>
+          </select>
+        </label>
         <div id="retarget-list"></div>
       </div>
       <div class="button-row">

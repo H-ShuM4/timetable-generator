@@ -48,7 +48,7 @@ const api = {
   getRetarget(sessionId) {
     return request(`/api/retarget/${sessionId}`);
   },
-  startGeneration(sessionId, mode, retargetCodes, weights, repairEffort) {
+  startGeneration(sessionId, mode, retargetCodes, weights, repairEffort, retargetWith) {
     return request(`/api/generate/${sessionId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -58,6 +58,7 @@ const api = {
         retarget_codes: retargetCodes ?? null,
         weights: weights || {},
         repair_effort: repairEffort || "off",
+        retarget_with: retargetWith || "solver",
       }),
     });
   },

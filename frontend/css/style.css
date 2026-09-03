@@ -197,6 +197,16 @@ button.primary:hover:not(:disabled) { background: var(--indigo-deep); border-col
 
 /* 実データでは非常勤だけで 141 件ある。理由ごとに畳み、件数を見出しに出す。
    1 件 1 行をベタ並びにすると、何件あるのかが読み取れない。 */
+.retarget-method {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.875rem;
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+}
+.retarget-method select { font-size: 0.8125rem; padding: 0.25rem 0.5rem; }
+
 .retarget-summary { margin: 0 0 0.5rem; font-size: 0.875rem; }
 .retarget-summary b { font-family: var(--font-data); color: var(--indigo-deep); }
 

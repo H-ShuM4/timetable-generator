@@ -67,6 +67,15 @@ class GenerateIn(BaseModel):
     repair_effort: str = Field(default="off", pattern="^(off|short|long)$")
     """配置の見直しにかける時間。"""
 
+    retarget_with: str = Field(default="solver", pattern="^(solver|ai)$")
+    """踏襲モードで、組み替え対象を誰が配置するか。
+
+    **既定はソルバー。** 前年度をなぞるのが踏襲モードの目的で、組み替えは
+    その残りにすぎない。API キーがあるだけで Gemini に渡ると、数十分と
+    無料枠を黙って使うことになる。AI に任せたいときだけ ai を送る。
+    AI モードの挙動はこの設定に左右されない。
+    """
+
     retarget_codes: list[str] | None = None
     """踏襲モードで組み替える科目。
 

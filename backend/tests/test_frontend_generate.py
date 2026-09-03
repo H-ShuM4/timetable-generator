@@ -131,3 +131,25 @@ def test_the_weighting_section_folds_for_inherit(run_js):
     重み付け 6 本が先に来ると、その一覧がスクロールの先へ押し出される。
     """
     assert run_js("retarget_panel.js")["weights_open_for_inherit"] is False
+
+
+def test_the_retarget_placement_defaults_to_the_solver(run_js):
+    """キーがあるだけで Gemini に渡すと、数十分と無料枠を黙って使う。
+
+    前年度をなぞるのが踏襲モードの目的で、組み替えはその残り。既定は
+    このパソコンで配置する。
+    """
+    row = run_js("retarget_panel.js")["method_with_key"]
+    assert row["ai_disabled"] is False, "キーがあれば AI も選べる"
+    assert row["chosen"] == "solver"
+
+
+def test_the_office_can_hand_the_retargets_to_ai(run_js):
+    assert run_js("retarget_panel.js")["method_with_key_and_ai"]["chosen"] == "ai"
+
+
+def test_ai_cannot_be_chosen_for_the_retargets_without_a_key(run_js):
+    """AI モードと同じ扱い。選べないものを選ばせない。"""
+    row = run_js("retarget_panel.js")["method_without_key"]
+    assert row["ai_disabled"] is True
+    assert row["chosen"] == "solver", "AI を選んだ状態でもソルバーへ戻る"

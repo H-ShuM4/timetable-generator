@@ -144,6 +144,20 @@ function weightsFolding(mode) {
   return document.nodes["params"].open;
 }
 
+// 組み替え対象を誰に任せるか。API キーが無ければ AI は選べない。
+function retargetMethod(hasApiKey, picked) {
+  const { sandbox, document } = load(FULL);
+  // スタブは HTML の option を解釈しないので、既定値を明示して与える。
+  const select = document.getElementById("retarget-method");
+  select.value = picked || "solver";
+  sandbox.updateAiAvailability({ has_api_key: hasApiKey });
+  return {
+    ai_disabled: select.disabled === true,
+    value: select.value,
+    chosen: sandbox.selectedRetargetMethod(),
+  };
+}
+
 console.log(JSON.stringify({
   both_present: availability(FULL),
   timetable_only: availability({ ...FULL, has_previous_teachers: false }),
@@ -161,4 +175,7 @@ console.log(JSON.stringify({
   weights_open_for_mock: weightsFolding("mock"),
   weights_open_for_ai: weightsFolding("optimize"),
   weights_open_for_inherit: weightsFolding("inherit"),
+  method_with_key: retargetMethod(true),
+  method_with_key_and_ai: retargetMethod(true, "ai"),
+  method_without_key: retargetMethod(false, "ai"),
 }));

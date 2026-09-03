@@ -84,13 +84,24 @@ async def start_generation(session_id: str, payload: GenerateIn) -> dict:
     if mode is GenerationMode.OPTIMIZE and not api_key:
         logger.warn("API キーが未設定のためモックモードで実行します", stage="Stage 0")
         mode = GenerationMode.MOCK
-    if mode is GenerationMode.INHERIT and not api_key:
-        logger.info(
-            "API キーが未設定のため、組み替え対象はソルバーが配置します", stage="Stage 0"
-        )
+    # 踏襲モードで組み替え対象を誰に任せるかは事務局が決める。既定はソルバー。
+    # キーがあるだけで Gemini に渡ると、数十分と無料枠を黙って使ってしまう。
+    wants_ai = mode is GenerationMode.OPTIMIZE or (
+        mode is GenerationMode.INHERIT and payload.retarget_with == "ai"
+    )
+    if mode is GenerationMode.INHERIT:
+        if not wants_ai:
+            logger.info("組み替え対象はソルバーが配置します", stage="Stage 0")
+        elif not api_key:
+            logger.warn(
+                "API キーが未設定のため、組み替え対象はソルバーが配置します",
+                stage="Stage 0",
+            )
+        else:
+            logger.info("組み替え対象は AI が配置します", stage="Stage 0")
 
     placer = None
-    if mode is not GenerationMode.MOCK and api_key:
+    if wants_ai and api_key:
         models = settings.models_in_order()
 
         def announce_switch(left: str, next_model: str | None, error: Exception) -> None:

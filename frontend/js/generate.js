@@ -116,6 +116,12 @@ function updateAiAvailability(settings) {
   const ready = Boolean(settings && settings.has_api_key);
 
   radio.disabled = !ready;
+  // 組み替えを AI に任せる選択肢も、キーが無ければ押せない。
+  const method = document.getElementById("retarget-method");
+  if (method) {
+    method.disabled = !ready;
+    if (!ready) method.value = "solver";
+  }
   if (ready) {
     note.hidden = true;
     note.textContent = "";
@@ -132,6 +138,12 @@ function updateAiAvailability(settings) {
 
 // 踏襲モードでは重み付けを畳む。6 本のスライダーが先に来ると、その日いちばん
 // 触りたい「組み替え対象」がスクロールの先へ押し出される。
+/** 組み替え対象を誰に任せるか。キーが無ければソルバーしか選べない。 */
+function selectedRetargetMethod() {
+  const select = document.getElementById("retarget-method");
+  return select && !select.disabled ? select.value : "solver";
+}
+
 function foldWeightsForMode() {
   document.getElementById("params").open = selectedMode() !== "inherit";
 }
@@ -314,7 +326,8 @@ async function startGeneration() {
     // null を送り、サーバ側の自動検出に触れないようにする。
     const retarget = selectedMode() === "inherit" ? checkedRetargetCodes() : null;
     const body = await api.startGeneration(
-      sessionId, selectedMode(), retarget, selectedWeights(), selectedEffort()
+      sessionId, selectedMode(), retarget, selectedWeights(), selectedEffort(),
+      selectedRetargetMethod()
     );
     if (body.mode !== selectedMode()) {
       const label = MODE_LABELS[body.mode] || body.mode;
