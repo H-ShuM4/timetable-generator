@@ -110,7 +110,35 @@
       <div class="result-toolbar">
         <div id="result-tabs"></div>
         <button id="undo-button" disabled>元に戻す</button>
-        <button id="export-button" class="primary">Excel として出力</button>
+        <label class="export-pick">
+          <select id="export-format">
+            <option value="xlsx">Excel（.xlsx）</option>
+            <option value="pdf">PDF（印刷）</option>
+          </select>
+        </label>
+        <button id="export-button" class="primary">出力</button>
+      </div>
+      <!-- PDF を選んだときだけ出す。用紙と詰め方で何ページになるかが変わる。 -->
+      <div id="export-options" hidden>
+        <label>単位
+          <select id="export-unit">
+            <option value="term">学科×学期（6 ページ）</option>
+            <option value="department">学科ごと（3 ページ・前後期を横並び）</option>
+          </select>
+        </label>
+        <label>用紙
+          <select id="export-paper">
+            <option value="a3">A3 横</option>
+            <option value="a4">A4 横</option>
+          </select>
+        </label>
+        <label>詰め方
+          <select id="export-density">
+            <option value="compact">1 行（科目名＋教員名）</option>
+            <option value="full">2 行（画面と同じ）</option>
+          </select>
+        </label>
+        <p class="hint" id="export-note"></p>
       </div>
       <div id="teacher-panel" hidden></div>
       <div class="result-layout">
@@ -216,6 +244,14 @@
       <div id="settings-status"></div>
     </section>
   </main>
+
+  <!-- 印刷（PDF）専用。画面では出さず、出力ボタンを押したときだけ組む。
+       main の中に入れると .view の display:none と .grid-wrap の overflow が
+       祖先として効き、刷ったときに中身が切り落とされる。 -->
+  <div id="print-sheets"></div>
+  <!-- 用紙は @page でしか指定できず、クラスでは切り替えられない。
+       選ばれた用紙をここへ書き込む。 -->
+  <style id="print-page-size"></style>
 
   <div id="log-panel" class="collapsed">
     <div id="log-header">

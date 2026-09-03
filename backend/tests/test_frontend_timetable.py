@@ -147,3 +147,58 @@ def test_a_subject_name_in_the_skipped_list_cannot_inject_markup(run_js):
     html = run_js("timetable_render.js")["skip_html"]
     assert "<img" not in html
     assert "&lt;img" in html
+
+
+def test_the_term_layout_makes_one_sheet_per_department_and_term(run_js):
+    """事務局が全体を見渡す揃い。Excel と同じ 6 通り＋集中講義。"""
+    row = run_js("timetable_render.js")["print_term"]
+    assert row["headings"] == [
+        "経営・前期", "経営・後期", "会計・前期", "会計・後期",
+        "短期大学部・前期", "短期大学部・後期", "集中講義",
+    ]
+    assert row["sheets"] == 7
+    assert row["tables"] == 6, "集中講義は一覧なので表にしない"
+    assert row["pairs"] == 0
+
+
+def test_the_department_layout_puts_both_terms_side_by_side(run_js):
+    """学科ごとの 1 枚。年間の流れが 1 枚で追える。"""
+    row = run_js("timetable_render.js")["print_department"]
+    assert row["headings"] == ["経営", "会計", "短期大学部", "集中講義"]
+    assert row["sheets"] == 4
+    assert row["pairs"] == 3, "学科ごとに前期・後期の 2 つ組"
+    assert row["tables"] == 6, "3 学科 × 2 学期"
+
+
+def test_each_sheet_holds_only_its_own_subjects(run_js):
+    """絞り込みを間違えると、経営の紙に会計の科目が混ざる。"""
+    for key in ("print_term", "print_department"):
+        assert run_js("timetable_render.js")[key]["codes"] == [
+            "P1", "P7", "P2", "P3", "P4", "P5", "P6"
+        ], key
+
+
+def test_the_compact_layout_is_switched_by_a_class(run_js):
+    """1 行カードは印刷スタイル側で当てる。組み立ては 1 本のまま。"""
+    out = run_js("timetable_render.js")
+    assert out["print_term"]["compact_class"] == "compact"
+    assert out["print_full"]["compact_class"] == ""
+
+
+def test_the_teacher_name_travels_on_the_card_name(run_js):
+    """1 行カードで教員名を同じ行へ出すのに要る。
+
+    attr() は自分の属性しか読めないので .card ではなく .card-name に置く。
+    """
+    assert run_js("timetable_render.js")["print_term"]["teacher_on_name"] is True
+
+
+def test_a_subject_name_cannot_inject_markup_into_a_print_sheet(run_js):
+    row = run_js("timetable_render.js")["print_term"]
+    assert row["has_raw_tag"] is False
+    assert row["has_escaped_tag"] is True
+
+
+def test_the_print_sheets_are_dropped_once_printing_is_done(run_js):
+    """613 件ぶんのカードを抱えたままにしない。"""
+    assert run_js("timetable_render.js")["print_term"]["cleared"] is True

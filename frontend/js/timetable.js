@@ -181,7 +181,8 @@ function cardHtml(placement, grabbedLabel, isViolating, showDepartment) {
          title="${title}">
       <span class="card-rail" aria-hidden="true"></span>
       <span class="card-year y${escapeHtml(String(placement.year))}">${escapeHtml(String(placement.year))}年</span>
-      <span class="card-name">${escapeHtml(placement.name)}</span>
+      <span class="card-name"
+            data-teacher="${escapeHtml(placement.teacher)}">${escapeHtml(placement.name)}</span>
       <span class="card-meta">${escapeHtml(
         showDepartment ? placement.department : placement.teacher
       )}・${escapeHtml(placement.category)}</span>
@@ -198,10 +199,10 @@ function visiblePlacements() {
   );
 }
 
-function renderGrid() {
+// 表そのものを組む。書き込み先を知らないので、画面のグリッドと印刷用の
+// シートが同じ 1 本を通る。片方だけ直すと、刷った紙と画面が食い違う。
+function gridMarkup(visible, byTeacher) {
   const violating = violatingCodes();
-  const byTeacher = currentView === "teacher";
-  const visible = visiblePlacements();
 
   const rows = PERIODS.map((period) => {
     const cells = DAYS.map((day) => {
@@ -225,13 +226,129 @@ function renderGrid() {
       ${cells}</tr>`;
   }).join("");
 
-  document.getElementById("timetable-grid").innerHTML = `
+  return `
     <table class="timetable">
       <thead><tr><th></th>${DAYS.map((d) => `<th>${d}</th>`).join("")}</tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
+}
 
+function renderGrid() {
+  document.getElementById("timetable-grid").innerHTML =
+    gridMarkup(visiblePlacements(), currentView === "teacher");
   attachDragHandlers();
+}
+
+// ---------------------------------------------------------------- 印刷
+
+const PRINT_DEPARTMENTS = ["経営", "会計", "短期大学部"];
+const PRINT_TERMS = ["前期", "後期"];
+
+// 用紙ごとの描画領域（余白 10mm を引いた mm を 96dpi の CSS px に直したもの）。
+// 何ページに分かれるかを、印刷ダイアログを開く前に測るのに使う。
+const PAPERS = {
+  a4: { label: "A4 横", css: "A4 landscape", width: 1047, height: 718 },
+  a3: { label: "A3 横", css: "A3 landscape", width: 1512, height: 1047 },
+};
+
+function placementsIn(department, term) {
+  return resultData.placements.filter(
+    (p) => p.department === department && p.term === term
+  );
+}
+
+function printSheet(heading, body) {
+  return `<section class="print-sheet">
+    <h3 class="print-heading">${escapeHtml(heading)}</h3>
+    ${body}
+  </section>`;
+}
+
+function intensiveSheet() {
+  return printSheet("集中講義",
+    `<ul class="print-list">${
+      resultData.intensive.map((s) => `<li>${describeSubjectRef(s)}</li>`).join("")
+      || "<li>なし</li>"
+    }</ul>`);
+}
+
+/** 学科 × 学期で 1 枚ずつ。事務局が全体を見渡すときの揃い。 */
+function buildTermSheets() {
+  return PRINT_DEPARTMENTS.flatMap((department) =>
+    PRINT_TERMS.map((term) => printSheet(
+      `${department}・${term}`,
+      gridMarkup(placementsIn(department, term), false)
+    ))
+  ).join("") + intensiveSheet();
+}
+
+/** 学科ごとに 1 枚。前期と後期を左右に並べ、年間の流れを 1 枚で見せる。 */
+function buildDepartmentSheets() {
+  return PRINT_DEPARTMENTS.map((department) => printSheet(
+    department,
+    `<div class="print-pair">${
+      PRINT_TERMS.map((term) => `
+        <div class="print-half">
+          <h4 class="print-subheading">${escapeHtml(term)}</h4>
+          ${gridMarkup(placementsIn(department, term), false)}
+        </div>`).join("")
+    }</div>`
+  )).join("") + intensiveSheet();
+}
+
+const SHEET_BUILDERS = { term: buildTermSheets, department: buildDepartmentSheets };
+
+// 画面の見やすさ（レールの色・年次の濃淡・BIZ UD 書体）をそのまま紙へ
+// 持っていくため、PDF はブラウザの印刷で出す。同じ CSS・同じ書体で描かれる
+// ので見た目が一致し、追加のライブラリも要らない。事務局の PC がオフライン
+// でも確実に動く。
+function buildPrintSheets(unit, compact) {
+  if (!resultData) return;
+  const stamped = new Date().toLocaleString("ja-JP", {
+    year: "numeric", month: "long", day: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+  const box = document.getElementById("print-sheets");
+  box.className = compact ? "compact" : "";
+  box.innerHTML =
+    `<p class="print-stamp">時間割自動生成システム　${escapeHtml(stamped)} 出力</p>`
+    + (SHEET_BUILDERS[unit] || buildTermSheets)();
+}
+
+function clearPrintSheets() {
+  // 613 件ぶんのカードを抱えたままにしない。
+  const box = document.getElementById("print-sheets");
+  box.innerHTML = "";
+  box.className = "";
+}
+
+/** 選ばれた用紙を @page へ当てる。クラスでは切り替えられない。 */
+function applyPaper(paper) {
+  const size = (PAPERS[paper] || PAPERS.a3).css;
+  document.getElementById("print-page-size").textContent =
+    `@page { size: ${size}; margin: 10mm; }`;
+}
+
+/**
+ * 組んだシートを印刷幅で測り、1 枚に収まらないものを返す。
+ *
+ * 印刷ダイアログを開くまで何ページになるか分からないと、A4 を選んで
+ * 割れていることに刷ってから気づく。測ってから出す。
+ */
+function oversizedSheets(paper) {
+  const page = PAPERS[paper] || PAPERS.a3;
+  const box = document.getElementById("print-sheets");
+  const keep = box.style.cssText;
+  box.style.cssText =
+    `display:block;position:absolute;left:-10000px;top:0;width:${page.width}px`;
+  const over = [...box.querySelectorAll(".print-sheet")]
+    .map((sheet) => ({
+      heading: sheet.querySelector(".print-heading").textContent.trim(),
+      pages: Math.ceil(sheet.getBoundingClientRect().height / page.height),
+    }))
+    .filter((row) => row.pages > 1);
+  box.style.cssText = keep;
+  return over;
 }
 
 function describeSubjectRef(subject) {
@@ -494,6 +611,7 @@ async function renderTimetable() {
   renderTeacherPanel();
   renderGrid();
   renderSide();
+  refreshExportOptions();
 }
 
 function initTimetable() {
@@ -506,8 +624,84 @@ function initTimetable() {
       undoLastMove();
     }
   });
-  document.getElementById("export-button").addEventListener("click", () => {
-    if (!window.appState.sessionId) return;
-    window.location.href = api.exportUrl(window.appState.sessionId);
+  document.getElementById("export-button").addEventListener("click", exportResult);
+  // 印刷が終わったら（保存でも取り消しでも）組んだシートを捨てる。
+  window.addEventListener("afterprint", clearPrintSheets);
+
+  EXPORT_CONTROLS.forEach((id) => {
+    const control = document.getElementById(id);
+    control.value = readExportSetting(id, control.value);
+    control.addEventListener("change", () => {
+      saveExportSetting(id, control.value);
+      refreshExportOptions();
+    });
   });
+  refreshExportOptions();
+}
+
+const EXPORT_CONTROLS = [
+  "export-format", "export-unit", "export-paper", "export-density",
+];
+const EXPORT_KEY = "timetable.export";
+
+function readExportSetting(id, fallback) {
+  try {
+    return (JSON.parse(window.localStorage.getItem(EXPORT_KEY)) || {})[id] || fallback;
+  } catch (error) {
+    return fallback;
+  }
+}
+
+function saveExportSetting(id, value) {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(EXPORT_KEY)) || {};
+    saved[id] = value;
+    window.localStorage.setItem(EXPORT_KEY, JSON.stringify(saved));
+  } catch (error) {
+    // 保存できなくても出力はできる
+  }
+}
+
+function exportSettings() {
+  return {
+    format: document.getElementById("export-format").value,
+    unit: document.getElementById("export-unit").value,
+    paper: document.getElementById("export-paper").value,
+    compact: document.getElementById("export-density").value === "compact",
+  };
+}
+
+/** PDF のときだけ選択肢を出し、何ページに分かれるかを先に測って伝える。 */
+function refreshExportOptions() {
+  const settings = exportSettings();
+  const options = document.getElementById("export-options");
+  options.hidden = settings.format !== "pdf";
+  if (options.hidden || !resultData) return;
+
+  buildPrintSheets(settings.unit, settings.compact);
+  const over = oversizedSheets(settings.paper);
+  clearPrintSheets();
+
+  const note = document.getElementById("export-note");
+  const paper = (PAPERS[settings.paper] || PAPERS.a3).label;
+  note.textContent = over.length
+    ? `${paper}では ${over.map((row) => `${row.heading}（${row.pages} ページ）`).join("、")}`
+      + " が 1 枚に収まりません。用紙か詰め方を変えると 1 枚にできます。"
+    : `${paper}で、どの区分も 1 枚に収まります。`;
+  note.classList.toggle("warn", over.length > 0);
+}
+
+function exportResult() {
+  if (!window.appState.sessionId) return;
+  const settings = exportSettings();
+
+  if (settings.format === "pdf") {
+    // 印刷ダイアログで「PDF として保存」を選んでもらう。画面と同じ CSS で
+    // 描かれるので、レールの色も年次の濃淡もそのまま紙に載る。
+    buildPrintSheets(settings.unit, settings.compact);
+    applyPaper(settings.paper);
+    window.print();
+    return;
+  }
+  window.location.href = api.exportUrl(window.appState.sessionId);
 }
