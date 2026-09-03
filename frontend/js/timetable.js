@@ -23,6 +23,9 @@ let currentTerm = "前期";
 // 学科のビューを渡り歩かないと 1 人の週の予定が分からなかった。
 let currentView = "department";
 let currentTeacher = null;
+// 教員別の絞り込み文字列。実データの教員は 99 名で、プルダウンだけでは
+// 目当ての先生まで延々スクロールすることになる。
+let teacherFilter = "";
 
 function parseSlot(label) {
   return { day: label.slice(0, 1), period: Number(label.slice(1)) };
@@ -36,6 +39,40 @@ function violatingCodes() {
     if (violation.related_code) codes.add(violation.related_code);
   });
   return codes;
+}
+
+function matchesTeacher(name, query) {
+  if (!query) return true;
+  // 氏名は Excel 由来で姓名の間の空白が全角・半角で揺れる。両方落として比べる。
+  const flat = (value) => String(value).replace(/[\s　]/g, "");
+  return flat(name).includes(flat(query));
+}
+
+function teacherOptionsHtml(teachers) {
+  return teachers
+    .map((name) => `
+      <option value="${escapeHtml(name)}"${name === currentTeacher ? " selected" : ""}>
+        ${escapeHtml(name)}</option>`)
+    .join("");
+}
+
+/** 絞り込みだけを描き直す。入力欄そのものは触らないので、打鍵で focus が飛ばない。 */
+function applyTeacherFilter() {
+  const matched = teachersWithClasses().filter((n) => matchesTeacher(n, teacherFilter));
+  const select = document.getElementById("teacher-select");
+  const count = document.getElementById("teacher-count");
+  if (!select) return matched;
+
+  if (matched.length && !matched.includes(currentTeacher)) {
+    currentTeacher = matched[0];
+  }
+  select.innerHTML = teacherOptionsHtml(matched);
+  select.disabled = matched.length === 0;
+  if (count) {
+    count.textContent = matched.length ? `${matched.length} 名` : "該当なし";
+    count.classList.toggle("empty", matched.length === 0);
+  }
+  return matched;
 }
 
 function teachersWithClasses() {
@@ -53,6 +90,10 @@ function renderTabs() {
   if (currentView === "teacher" && !teachers.includes(currentTeacher)) {
     currentTeacher = teachers[0] || null;
   }
+  const visible = teachers.filter((name) => matchesTeacher(name, teacherFilter));
+  if (currentView === "teacher" && visible.length && !visible.includes(currentTeacher)) {
+    currentTeacher = visible[0];
+  }
 
   const axis = currentView === "department"
     ? `<div class="group">
@@ -60,15 +101,14 @@ function renderTabs() {
            <button class="dept-tab${d === currentDepartment ? " active" : ""}"
                    data-dept="${d}">${escapeHtml(d)}</button>`).join("")}
        </div>`
-    : `<div class="group">
-         <label class="teacher-pick">
-           <span>教員</span>
-           <select id="teacher-select">
-             ${teachers.map((name) => `
-               <option value="${escapeHtml(name)}"${name === currentTeacher ? " selected" : ""}>
-                 ${escapeHtml(name)}</option>`).join("")}
-           </select>
+    : `<div class="group teacher-pick">
+         <label>
+           <span class="pick-label">教員</span>
+           <input type="search" id="teacher-search" placeholder="氏名で絞り込む"
+                  value="${escapeHtml(teacherFilter)}" autocomplete="off">
          </label>
+         <select id="teacher-select">${teacherOptionsHtml(visible)}</select>
+         <span id="teacher-count" class="teacher-count"></span>
        </div>`;
 
   document.getElementById("result-tabs").innerHTML = `
@@ -110,6 +150,22 @@ function renderTabs() {
       renderTimetable();
     });
   }
+
+  const search = document.getElementById("teacher-search");
+  if (search) {
+    // 打鍵ごとに選択肢と件数だけを差し替える。表そのものは Enter か
+    // プルダウンの選択で描き直す。1 文字ごとに 600 枚を描き直さない。
+    search.addEventListener("input", () => {
+      teacherFilter = search.value;
+      applyTeacherFilter();
+    });
+    search.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      if (applyTeacherFilter().length) renderTimetable();
+    });
+  }
+  if (currentView === "teacher") applyTeacherFilter();
 }
 
 // 前①・後① は学期の前半、前②・後② は後半に開講する。カード左端の

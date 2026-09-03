@@ -123,6 +123,27 @@ function emptyList() {
   return document.nodes["retarget-list"].innerHTML.replace(/\s+/g, " ").trim();
 }
 
+// AI モードは API キーが要る。キーが無いまま選べると、サーバが黙って
+// モックへ落とすので「AI で作ったつもりの時間割」が出来上がる。
+function aiAvailability(hasApiKey, selectedMode) {
+  const { sandbox, document, modes } = load(FULL, selectedMode);
+  sandbox.updateAiAvailability({ has_api_key: hasApiKey });
+  const note = document.nodes["ai-note"];
+  return {
+    ai_disabled: modes.optimize.disabled,
+    note_hidden: note.hidden === true,
+    note: note.textContent,
+    mock_checked: modes.mock.checked,
+  };
+}
+
+// 踏襲モードでは重み付けを畳む。組み替え対象までスクロールが遠くなるため。
+function weightsFolding(mode) {
+  const { sandbox, document } = load(FULL, mode);
+  sandbox.foldWeightsForMode();
+  return document.nodes["params"].open;
+}
+
 console.log(JSON.stringify({
   both_present: availability(FULL),
   timetable_only: availability({ ...FULL, has_previous_teachers: false }),
@@ -134,4 +155,10 @@ console.log(JSON.stringify({
   no_summary_yet: availability(undefined),
   list: retargetList(),
   empty: emptyList(),
+  ai_with_key: aiAvailability(true),
+  ai_without_key: aiAvailability(false),
+  ai_falls_back_to_mock: aiAvailability(false, "optimize"),
+  weights_open_for_mock: weightsFolding("mock"),
+  weights_open_for_ai: weightsFolding("optimize"),
+  weights_open_for_inherit: weightsFolding("inherit"),
 }));

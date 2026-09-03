@@ -33,11 +33,12 @@ from app.scheduler.pipeline import GenerationResult
 
 SESSIONS_DIR = storage_root() / "data" / "sessions"
 
-MAX_SESSIONS = 20
+MAX_SESSIONS = 10
 """保存しておくセッション数。古いものから消す。
 
 1 セッションで Excel 2〜4 本と結果 JSON を抱えるため、放置すると
 際限なく増える。事務局が遡って見たいのはせいぜい直近の数回である。
+読込画面の一覧もこの数だけ並ぶので、多すぎると選びにくい。
 """
 
 FILE_ROLES = ("curriculum", "teachers", "previous_curriculum", "previous_teachers")

@@ -108,8 +108,42 @@ function renderRetargetList() {
     .addEventListener("click", () => setAllRetarget(false));
 }
 
+// AI モードは API キーが要る。キーが無いまま選ぶと、サーバは黙ってモックへ
+// 落とす。走り終わってから「AI で作ったつもりだった」と気づくのは遅すぎる。
+function updateAiAvailability(settings) {
+  const radio = document.querySelector('input[name="mode"][value="optimize"]');
+  const note = document.getElementById("ai-note");
+  const ready = Boolean(settings && settings.has_api_key);
+
+  radio.disabled = !ready;
+  if (ready) {
+    note.hidden = true;
+    note.textContent = "";
+    return;
+  }
+  note.hidden = false;
+  note.textContent =
+    "AI モードには Gemini の API キーが要ります。"
+    + "右上の「設定」で登録してください。";
+  if (radio.checked) {
+    document.querySelector('input[name="mode"][value="mock"]').checked = true;
+  }
+}
+
+// 踏襲モードでは重み付けを畳む。6 本のスライダーが先に来ると、その日いちばん
+// 触りたい「組み替え対象」がスクロールの先へ押し出される。
+function foldWeightsForMode() {
+  document.getElementById("params").open = selectedMode() !== "inherit";
+}
+
 async function onEnterGenerateView() {
   updateInheritAvailability();
+  try {
+    updateAiAvailability(await api.getSettings());
+  } catch (error) {
+    // 設定が引けなくても生成の道は塞がない
+  }
+  foldWeightsForMode();
   const isInherit = selectedMode() === "inherit";
   document.getElementById("retarget-panel").hidden = !isInherit;
   if (!isInherit || !window.appState.sessionId) return;

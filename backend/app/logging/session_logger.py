@@ -25,13 +25,13 @@ class LogEvent:
         return asdict(self)
 
 
-MAX_LOG_FILES = 20
+MAX_LOG_FILES = 10
 """残しておくログファイルの数。古いものから消す。
 
 不具合の原因を追うのに要るのは直近の数回で、それ以前は溜まるだけ。
 実際 380 ファイル・1.2MB まで増えていた。
 
-保存しているセッション（`session_store.MAX_SESSIONS`）と同じ 20 件に
+保存しているセッション（`session_store.MAX_SESSIONS`）と同じ数に
 そろえてある。時間割そのものが残っていない回のログだけが残っていても
 突き合わせようがない。
 """

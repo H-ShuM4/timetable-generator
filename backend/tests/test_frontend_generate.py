@@ -101,3 +101,39 @@ def test_nothing_to_retarget_says_so_without_blaming_the_files(run_js):
     text = run_js("retarget_panel.js")["empty"]
     assert "組み替えが要る科目はありません" in text
     assert "読み込んでください" not in text
+
+
+def test_ai_mode_is_available_once_an_api_key_is_registered(run_js):
+    row = run_js("retarget_panel.js")["ai_with_key"]
+    assert row["ai_disabled"] is False
+    assert row["note_hidden"] is True
+
+
+def test_ai_mode_is_blocked_without_an_api_key(run_js):
+    """キーが無いまま選ぶと、サーバは黙ってモックへ落とす。
+
+    走り終わってから「AI で作ったつもりだった」と気づくのは遅すぎる。
+    """
+    row = run_js("retarget_panel.js")["ai_without_key"]
+    assert row["ai_disabled"] is True
+    assert "API キー" in row["note"]
+    assert "設定" in row["note"], "どこで登録するかまで書く"
+
+
+def test_selecting_ai_without_a_key_falls_back_to_mock(run_js):
+    """押せないモードが選ばれたままにしない。"""
+    assert run_js("retarget_panel.js")["ai_falls_back_to_mock"]["mock_checked"] is True
+
+
+def test_the_weighting_section_stays_open_for_mock_and_ai(run_js):
+    out = run_js("retarget_panel.js")
+    assert out["weights_open_for_mock"] is True
+    assert out["weights_open_for_ai"] is True
+
+
+def test_the_weighting_section_folds_for_inherit(run_js):
+    """踏襲モードで触りたいのは組み替え対象。
+
+    重み付け 6 本が先に来ると、その一覧がスクロールの先へ押し出される。
+    """
+    assert run_js("retarget_panel.js")["weights_open_for_inherit"] is False

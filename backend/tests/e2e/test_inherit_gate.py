@@ -32,7 +32,10 @@ def test_inherit_is_blocked_until_the_previous_year_files_arrive(
 
     expect(page.locator('input[name="mode"][value="inherit"]')).to_be_disabled()
     expect(page.locator('input[name="mode"][value="mock"]')).to_be_enabled()
-    expect(page.locator('input[name="mode"][value="optimize"]')).to_be_enabled()
+    # AI モードも API キーが要る。E2E のサーバはキーを持たないので押せない。
+    # キーが無いまま選ぶとサーバが黙ってモックへ落とすため、先に止める。
+    expect(page.locator('input[name="mode"][value="optimize"]')).to_be_disabled()
+    expect(page.locator("#ai-note")).to_contain_text("API キー")
 
     note = page.locator("#inherit-note")
     expect(note).to_be_visible()
