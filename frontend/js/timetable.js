@@ -243,13 +243,6 @@ function renderGrid() {
 const PRINT_DEPARTMENTS = ["経営", "会計", "短期大学部"];
 const PRINT_TERMS = ["前期", "後期"];
 
-// 用紙ごとの描画領域（余白 10mm を引いた mm を 96dpi の CSS px に直したもの）。
-// 何ページに分かれるかを、印刷ダイアログを開く前に測るのに使う。
-const PAPERS = {
-  a4: { label: "A4 横", css: "A4 landscape", width: 1047, height: 718 },
-  a3: { label: "A3 横", css: "A3 landscape", width: 1512, height: 1047 },
-};
-
 function placementsIn(department, term) {
   return resultData.placements.filter(
     (p) => p.department === department && p.term === term
@@ -271,87 +264,38 @@ function intensiveSheet() {
     }</ul>`);
 }
 
-/** 学科 × 学期で 1 枚ずつ。事務局が全体を見渡すときの揃い。 */
-function buildTermSheets() {
-  return PRINT_DEPARTMENTS.flatMap((department) =>
-    PRINT_TERMS.map((term) => printSheet(
-      `${department}・${term}`,
-      gridMarkup(placementsIn(department, term), false)
-    ))
-  ).join("") + intensiveSheet();
-}
-
-/** 学科ごとに 1 枚。前期と後期を左右に並べ、年間の流れを 1 枚で見せる。 */
-function buildDepartmentSheets() {
-  return PRINT_DEPARTMENTS.map((department) => printSheet(
-    department,
-    `<div class="print-pair">${
-      PRINT_TERMS.map((term) => `
-        <div class="print-half">
-          <h4 class="print-subheading">${escapeHtml(term)}</h4>
-          ${gridMarkup(placementsIn(department, term), false)}
-        </div>`).join("")
-    }</div>`
-  )).join("") + intensiveSheet();
-}
-
-const SHEET_BUILDERS = { term: buildTermSheets, department: buildDepartmentSheets };
-
-// 画面の見やすさ（レールの色・年次の濃淡・BIZ UD 書体）をそのまま紙へ
-// 持っていくため、PDF はブラウザの印刷で出す。同じ CSS・同じ書体で描かれる
-// ので見た目が一致し、追加のライブラリも要らない。事務局の PC がオフライン
-// でも確実に動く。
-// 詰め方は 3 段階。区分まで入れると横幅を食うので、学科ごとの横並び
-// （幅が半分）では入りきらない。どれが収まるかは oversizedSheets が出す。
-const DENSITY_CLASS = { compact: "compact", slim: "compact slim", full: "" };
-
-function buildPrintSheets(unit, density) {
+/**
+ * 印刷用のシートを組む。学科 × 学期で 1 枚ずつ、最後に集中講義の一覧。
+ *
+ * 画面の見やすさ（レールの色・年次の濃淡・BIZ UD 書体）をそのまま紙へ
+ * 持っていくため、PDF はブラウザの印刷で出す。同じ CSS・同じ書体で描かれる
+ * ので見た目が一致し、追加のライブラリも要らない。事務局の PC がオフライン
+ * でも確実に動く。
+ *
+ * **組み合わせは 1 通りに決めてある。** A3 横・1 行カード（科目名・教員名・
+ * 区分）で、どの区分も 1 枚に収まることを実データで確かめた（比 0.54〜0.65）。
+ * 選ばせるほどの差が無いので、用紙と詰め方の切り替えは持たない。
+ */
+function buildPrintSheets() {
   if (!resultData) return;
   const stamped = new Date().toLocaleString("ja-JP", {
     year: "numeric", month: "long", day: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
-  const box = document.getElementById("print-sheets");
-  box.className = DENSITY_CLASS[density] ?? DENSITY_CLASS.compact;
-  box.innerHTML =
+  document.getElementById("print-sheets").innerHTML =
     `<p class="print-stamp">時間割自動生成システム　${escapeHtml(stamped)} 出力</p>`
-    + (SHEET_BUILDERS[unit] || buildTermSheets)();
+    + PRINT_DEPARTMENTS.flatMap((department) =>
+        PRINT_TERMS.map((term) => printSheet(
+          `${department}・${term}`,
+          gridMarkup(placementsIn(department, term), false)
+        ))
+      ).join("")
+    + intensiveSheet();
 }
 
 function clearPrintSheets() {
   // 613 件ぶんのカードを抱えたままにしない。
-  const box = document.getElementById("print-sheets");
-  box.innerHTML = "";
-  box.className = "";
-}
-
-/** 選ばれた用紙を @page へ当てる。クラスでは切り替えられない。 */
-function applyPaper(paper) {
-  const size = (PAPERS[paper] || PAPERS.a3).css;
-  document.getElementById("print-page-size").textContent =
-    `@page { size: ${size}; margin: 10mm; }`;
-}
-
-/**
- * 組んだシートを印刷幅で測り、1 枚に収まらないものを返す。
- *
- * 印刷ダイアログを開くまで何ページになるか分からないと、A4 を選んで
- * 割れていることに刷ってから気づく。測ってから出す。
- */
-function oversizedSheets(paper) {
-  const page = PAPERS[paper] || PAPERS.a3;
-  const box = document.getElementById("print-sheets");
-  const keep = box.style.cssText;
-  box.style.cssText =
-    `display:block;position:absolute;left:-10000px;top:0;width:${page.width}px`;
-  const over = [...box.querySelectorAll(".print-sheet")]
-    .map((sheet) => ({
-      heading: sheet.querySelector(".print-heading").textContent.trim(),
-      pages: Math.ceil(sheet.getBoundingClientRect().height / page.height),
-    }))
-    .filter((row) => row.pages > 1);
-  box.style.cssText = keep;
-  return over;
+  document.getElementById("print-sheets").innerHTML = "";
 }
 
 function describeSubjectRef(subject) {
@@ -614,7 +558,6 @@ async function renderTimetable() {
   renderTeacherPanel();
   renderGrid();
   renderSide();
-  refreshExportOptions();
 }
 
 function initTimetable() {
@@ -631,78 +574,36 @@ function initTimetable() {
   // 印刷が終わったら（保存でも取り消しでも）組んだシートを捨てる。
   window.addEventListener("afterprint", clearPrintSheets);
 
-  EXPORT_CONTROLS.forEach((id) => {
-    const control = document.getElementById(id);
-    control.value = readExportSetting(id, control.value);
-    control.addEventListener("change", () => {
-      saveExportSetting(id, control.value);
-      refreshExportOptions();
-    });
-  });
-  refreshExportOptions();
+  const format = document.getElementById("export-format");
+  format.value = readExportFormat();
+  format.addEventListener("change", () => saveExportFormat(format.value));
 }
 
-const EXPORT_CONTROLS = [
-  "export-format", "export-unit", "export-paper", "export-density",
-];
-const EXPORT_KEY = "timetable.export";
+const EXPORT_KEY = "timetable.exportFormat";
 
-function readExportSetting(id, fallback) {
+function readExportFormat() {
   try {
-    return (JSON.parse(window.localStorage.getItem(EXPORT_KEY)) || {})[id] || fallback;
+    return window.localStorage.getItem(EXPORT_KEY) === "xlsx" ? "xlsx" : "pdf";
   } catch (error) {
-    return fallback;
+    return "pdf";
   }
 }
 
-function saveExportSetting(id, value) {
+function saveExportFormat(value) {
   try {
-    const saved = JSON.parse(window.localStorage.getItem(EXPORT_KEY)) || {};
-    saved[id] = value;
-    window.localStorage.setItem(EXPORT_KEY, JSON.stringify(saved));
+    window.localStorage.setItem(EXPORT_KEY, value);
   } catch (error) {
     // 保存できなくても出力はできる
   }
 }
 
-function exportSettings() {
-  return {
-    format: document.getElementById("export-format").value,
-    unit: document.getElementById("export-unit").value,
-    paper: document.getElementById("export-paper").value,
-    density: document.getElementById("export-density").value,
-  };
-}
-
-/** PDF のときだけ選択肢を出し、何ページに分かれるかを先に測って伝える。 */
-function refreshExportOptions() {
-  const settings = exportSettings();
-  const options = document.getElementById("export-options");
-  options.hidden = settings.format !== "pdf";
-  if (options.hidden || !resultData) return;
-
-  buildPrintSheets(settings.unit, settings.density);
-  const over = oversizedSheets(settings.paper);
-  clearPrintSheets();
-
-  const note = document.getElementById("export-note");
-  const paper = (PAPERS[settings.paper] || PAPERS.a3).label;
-  note.textContent = over.length
-    ? `${paper}では ${over.map((row) => `${row.heading}（${row.pages} ページ）`).join("、")}`
-      + " が 1 枚に収まりません。用紙か詰め方を変えると 1 枚にできます。"
-    : `${paper}で、どの区分も 1 枚に収まります。`;
-  note.classList.toggle("warn", over.length > 0);
-}
-
 function exportResult() {
   if (!window.appState.sessionId) return;
-  const settings = exportSettings();
 
-  if (settings.format === "pdf") {
+  if (document.getElementById("export-format").value === "pdf") {
     // 印刷ダイアログで「PDF として保存」を選んでもらう。画面と同じ CSS で
     // 描かれるので、レールの色も年次の濃淡もそのまま紙に載る。
-    buildPrintSheets(settings.unit, settings.density);
-    applyPaper(settings.paper);
+    buildPrintSheets();
     window.print();
     return;
   }

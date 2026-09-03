@@ -17,12 +17,8 @@ window.print = () => { window.__printed += 1; };
 """
 
 
-def choose(page: Page, **values):
-    for name, value in values.items():
-        page.evaluate(
-            """([id, v]) => { const e = document.getElementById(id);
-               e.value = v; e.dispatchEvent(new Event("change", { bubbles: true })); }""",
-            [f"export-{name}", value])
+def choose_format(page: Page, value: str):
+    page.locator("#export-format").select_option(value)
 
 
 def test_the_term_layout_builds_every_sheet_and_prints(page: Page, live_server, sample_xlsx):
@@ -30,7 +26,7 @@ def test_the_term_layout_builds_every_sheet_and_prints(page: Page, live_server, 
     page.add_init_script(RECORD_PRINT)
     generate_in_mock_mode(page, live_server, sample_xlsx)
 
-    choose(page, format="pdf", unit="term", paper="a3", density="compact")
+    choose_format(page, "pdf")
     page.locator("#export-button").click()
 
     assert page.evaluate("() => window.__printed") == 1
@@ -43,24 +39,11 @@ def test_the_term_layout_builds_every_sheet_and_prints(page: Page, live_server, 
     assert page.locator("#print-sheets .card").count() > 0
 
 
-def test_the_department_layout_pairs_the_two_terms(page: Page, live_server, sample_xlsx):
-    page.add_init_script(RECORD_PRINT)
-    generate_in_mock_mode(page, live_server, sample_xlsx)
-
-    choose(page, format="pdf", unit="department", paper="a3", density="compact")
-    page.locator("#export-button").click()
-
-    headings = page.locator("#print-sheets .print-heading").all_text_contents()
-    assert [h.strip() for h in headings] == ["経営", "会計", "短期大学部", "集中講義"]
-    assert page.locator("#print-sheets .print-pair").count() == 3
-    assert page.locator("#print-sheets table.timetable").count() == 6
-
-
 def test_the_sheets_are_dropped_after_printing(page: Page, live_server, sample_xlsx):
     page.add_init_script(RECORD_PRINT)
     generate_in_mock_mode(page, live_server, sample_xlsx)
 
-    choose(page, format="pdf", unit="term", paper="a3", density="compact")
+    choose_format(page, "pdf")
     page.locator("#export-button").click()
     assert page.locator("#print-sheets .print-sheet").count() == 7
 
@@ -69,17 +52,32 @@ def test_the_sheets_are_dropped_after_printing(page: Page, live_server, sample_x
     assert page.locator("#print-sheets .print-sheet").count() == 0
 
 
-def test_the_page_count_is_told_before_printing(page: Page, live_server, sample_xlsx):
-    """印刷ダイアログを開くまで何ページになるか分からないのでは遅い。"""
+def test_every_timetable_sheet_fits_one_page(page: Page, live_server, sample_xlsx):
+    """A3 横・1 行カードで 1 区分 1 枚。用紙と詰め方を選ばせない前提。
+
+    事務局が Excel を増やしてここが崩れたら、設定を見直す合図になる。
+    末尾の集中講義は表ではなく一覧なので、割れても読めるため見ない。
+    """
     page.add_init_script(RECORD_PRINT)
     generate_in_mock_mode(page, live_server, sample_xlsx)
 
-    choose(page, format="pdf", unit="term", paper="a3", density="compact")
-    expect(page.locator("#export-note")).to_contain_text("1 枚に収まります")
+    choose_format(page, "pdf")
+    page.locator("#export-button").click()
 
-    choose(page, paper="a4", density="full")  # 2 行カードは A4 に入らない
-    expect(page.locator("#export-note")).to_contain_text("収まりません")
-    expect(page.locator("#export-note")).to_have_class("hint warn")
+    # A3 横・余白 10mm を 96dpi の CSS px に直した描画領域は 1512 × 1047
+    over = page.evaluate("""() => {
+      const box = document.getElementById("print-sheets");
+      box.style.cssText =
+        "display:block;position:absolute;left:-10000px;top:0;width:1512px";
+      const rows = [...box.querySelectorAll(".print-sheet")]
+        .filter((s) => s.querySelector("table.timetable"))
+        .map((s) => [s.querySelector(".print-heading").textContent.trim(),
+                     +(s.getBoundingClientRect().height / 1047).toFixed(2)])
+        .filter(([, ratio]) => ratio > 1);
+      box.style.cssText = "";
+      return rows;
+    }""")
+    assert over == [], f"1 枚に収まらない区分がある: {over}"
 
 
 def test_the_print_view_keeps_the_colours_that_carry_meaning(
@@ -91,7 +89,7 @@ def test_the_print_view_keeps_the_colours_that_carry_meaning(
     """
     page.add_init_script(RECORD_PRINT)
     generate_in_mock_mode(page, live_server, sample_xlsx)
-    choose(page, format="pdf", unit="term", paper="a3", density="compact")
+    choose_format(page, "pdf")
     page.locator("#export-button").click()
 
     page.emulate_media(media="print")
@@ -119,34 +117,14 @@ def test_pdf_is_the_default_because_that_is_what_the_office_distributes(
     generate_in_mock_mode(page, live_server, sample_xlsx)
 
     expect(page.locator("#export-format")).to_have_value("pdf")
-    expect(page.locator("#export-options")).to_be_visible()
 
 
 def test_excel_still_downloads_when_chosen(page: Page, live_server, sample_xlsx):
     generate_in_mock_mode(page, live_server, sample_xlsx)
 
-    choose(page, format="xlsx")
-    expect(page.locator("#export-options")).to_be_hidden()
+    choose_format(page, "xlsx")
     with page.expect_download() as download:
         page.locator("#export-button").click()
     assert download.value.suggested_filename.endswith(".xlsx")
 
 
-def test_the_category_fits_the_term_layout_but_not_the_side_by_side_one(
-    page: Page, live_server, sample_xlsx
-):
-    """区分まで入れると横幅を食う。学科ごとは表の幅が半分なので入りきらない。
-
-    短縮（必／選／選必）でも 1.2 ページだったので、落とす選択肢を用意した。
-    """
-    page.add_init_script(RECORD_PRINT)
-    generate_in_mock_mode(page, live_server, sample_xlsx)
-
-    choose(page, format="pdf", paper="a3", unit="term", density="compact")
-    expect(page.locator("#export-note")).to_contain_text("1 枚に収まります")
-
-    choose(page, unit="department")
-    expect(page.locator("#export-note")).to_contain_text("収まりません")
-
-    choose(page, density="slim")
-    expect(page.locator("#export-note")).to_contain_text("1 枚に収まります")

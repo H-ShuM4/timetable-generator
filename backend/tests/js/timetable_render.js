@@ -124,9 +124,9 @@ const forPrinting = {
   violations: [],
 };
 
-function printCase(unit, density) {
+function printCase() {
   const sandbox = load(forPrinting);
-  sandbox.buildPrintSheets(unit, density);
+  sandbox.buildPrintSheets();
   const box = sandbox.document.nodes["print-sheets"];
   const html = box.innerHTML;
   const out = {
@@ -134,16 +134,14 @@ function printCase(unit, density) {
       .map((m) => m.match(/>([^<]*)</)[1].trim()),
     sheets: (html.match(/class="print-sheet"/g) || []).length,
     tables: (html.match(/class="timetable"/g) || []).length,
-    pairs: (html.match(/class="print-pair"/g) || []).length,
     codes: attributeValues(html, "data-code"),
-    compact_class: box.className,
     has_raw_tag: html.includes("<img"),
     has_escaped_tag: html.includes("&lt;img"),
     has_intensive: html.includes("集中の科目"),
     has_stamp: html.includes("print-stamp"),
   };
   sandbox.clearPrintSheets();
-  out.cleared = box.innerHTML === "" && box.className === "";
+  out.cleared = box.innerHTML === "";
   return out;
 }
 
@@ -222,10 +220,7 @@ function run() {
   const nameAt = dangerous.indexOf('class="card-name"');
   out.escaped_sample = dangerous.slice(nameAt, nameAt + 80);
 
-  out.print_term = printCase("term", "compact");
-  out.print_department = printCase("department", "compact");
-  out.print_full = printCase("term", "full");
-  out.print_slim = printCase("term", "slim");
+  out.print_sheets = printCase();
 
   return out;
 }
