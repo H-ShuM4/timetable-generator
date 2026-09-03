@@ -117,3 +117,44 @@ def test_the_teacher_view_gathers_one_teacher_across_departments(
     meta = page.locator("#timetable-grid .card .card-meta").first.inner_text()
     assert teacher not in meta
     assert any(name in meta for name in ("経営", "会計", "短期大学部"))
+
+
+def test_an_unplaced_subject_can_be_placed_by_dragging(
+    page: Page, live_server, sample_xlsx
+):
+    """未配置科目をグリッドへ落とすと、実際に配置される。
+
+    自動配置できなかった科目に事務局が手出しする唯一の道（設計仕様 §8.2）。
+    ここが黙って失敗すると、置けないうえに理由も出ないので、事務局は
+    何が起きたのか確かめようがない。
+
+    **実データのモック生成では未配置が 0 件になる。** 画面と同じ道
+    （undo が使う unplace）で 1 件つくってから、元のコマへ戻す。前の
+    瞬間までそこに居たコマなので、制約で断られることがない。
+    """
+    generate_in_mock_mode(page, live_server, sample_xlsx)
+    warnings = []
+    page.on("dialog", lambda dialog: (warnings.append(dialog.message), dialog.accept()))
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+
+    origin = page.evaluate("""async () => {
+      const card = document.querySelector("#timetable-grid .card");
+      const found = { code: card.dataset.code, slot: card.closest("td").dataset.slot };
+      await api.unplaceSubject(window.appState.sessionId, found.code);
+      await renderTimetable();
+      return found;
+    }""")
+
+    source = page.locator(f'.unplaced-card[data-code="{origin["code"]}"]')
+    expect(source).to_be_visible()
+    target = page.locator(f'#timetable-grid td[data-slot="{origin["slot"]}"]')
+    source.scroll_into_view_if_needed()
+    target.scroll_into_view_if_needed()
+
+    source.drag_to(target)
+
+    expect(page.locator(f'#timetable-grid .card[data-code="{origin["code"]}"]')).to_be_visible()
+    assert page.evaluate("() => resultData.unplaced.length") == 0
+    assert warnings == [], f"配置できたのに警告が出た: {warnings}"
+    assert errors == [], f"画面が例外を投げた: {errors}"

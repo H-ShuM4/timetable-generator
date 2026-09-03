@@ -235,7 +235,6 @@ function gridMarkup(visible, byTeacher) {
 function renderGrid() {
   document.getElementById("timetable-grid").innerHTML =
     gridMarkup(visiblePlacements(), currentView === "teacher");
-  attachDragHandlers();
 }
 
 // ---------------------------------------------------------------- 印刷
@@ -398,6 +397,13 @@ function renderInheritSkipped() {
   setCount("count-inherit-skipped", skipped.length);
 }
 
+/**
+ * ドラッグの掴み手と落とし先を配線する。
+ *
+ * innerHTML を入れ替えると要素ごと作り直されるため、リスナも一緒に消える。
+ * **描画のたびに呼び直す必要がある。** 呼ぶのは renderTimetable の末尾
+ * 1 か所だけにしてある（グリッド・未配置リストの両方が揃ってから）。
+ */
 function attachDragHandlers() {
   document.querySelectorAll(".card").forEach((card) => {
     card.addEventListener("dragstart", (event) => {
@@ -558,6 +564,10 @@ async function renderTimetable() {
   renderTeacherPanel();
   renderGrid();
   renderSide();
+  // **描画が全部終わってから配線する。** グリッドと未配置リストは別々の
+  // 関数が書くので、片方の中で配線すると、あとから書かれるもう片方には
+  // 何も付かない。実際それで未配置科目がドラッグに反応しなかった。
+  attachDragHandlers();
 }
 
 function initTimetable() {
