@@ -112,8 +112,8 @@
         <button id="undo-button" disabled>元に戻す</button>
         <label class="export-pick">
           <select id="export-format">
-            <option value="xlsx">Excel（.xlsx）</option>
             <option value="pdf">PDF（印刷）</option>
+            <option value="xlsx">Excel（.xlsx）</option>
           </select>
         </label>
         <button id="export-button" class="primary">出力</button>
@@ -134,7 +134,8 @@
         </label>
         <label>詰め方
           <select id="export-density">
-            <option value="compact">1 行（科目名＋教員名）</option>
+            <option value="compact">1 行（科目名・教員名・区分）</option>
+            <option value="slim">1 行（科目名・教員名）</option>
             <option value="full">2 行（画面と同じ）</option>
           </select>
         </label>

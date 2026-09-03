@@ -181,8 +181,7 @@ function cardHtml(placement, grabbedLabel, isViolating, showDepartment) {
          title="${title}">
       <span class="card-rail" aria-hidden="true"></span>
       <span class="card-year y${escapeHtml(String(placement.year))}">${escapeHtml(String(placement.year))}年</span>
-      <span class="card-name"
-            data-teacher="${escapeHtml(placement.teacher)}">${escapeHtml(placement.name)}</span>
+      <span class="card-name">${escapeHtml(placement.name)}</span>
       <span class="card-meta">${escapeHtml(
         showDepartment ? placement.department : placement.teacher
       )}・${escapeHtml(placement.category)}</span>
@@ -302,14 +301,18 @@ const SHEET_BUILDERS = { term: buildTermSheets, department: buildDepartmentSheet
 // 持っていくため、PDF はブラウザの印刷で出す。同じ CSS・同じ書体で描かれる
 // ので見た目が一致し、追加のライブラリも要らない。事務局の PC がオフライン
 // でも確実に動く。
-function buildPrintSheets(unit, compact) {
+// 詰め方は 3 段階。区分まで入れると横幅を食うので、学科ごとの横並び
+// （幅が半分）では入りきらない。どれが収まるかは oversizedSheets が出す。
+const DENSITY_CLASS = { compact: "compact", slim: "compact slim", full: "" };
+
+function buildPrintSheets(unit, density) {
   if (!resultData) return;
   const stamped = new Date().toLocaleString("ja-JP", {
     year: "numeric", month: "long", day: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
   const box = document.getElementById("print-sheets");
-  box.className = compact ? "compact" : "";
+  box.className = DENSITY_CLASS[density] ?? DENSITY_CLASS.compact;
   box.innerHTML =
     `<p class="print-stamp">時間割自動生成システム　${escapeHtml(stamped)} 出力</p>`
     + (SHEET_BUILDERS[unit] || buildTermSheets)();
@@ -667,7 +670,7 @@ function exportSettings() {
     format: document.getElementById("export-format").value,
     unit: document.getElementById("export-unit").value,
     paper: document.getElementById("export-paper").value,
-    compact: document.getElementById("export-density").value === "compact",
+    density: document.getElementById("export-density").value,
   };
 }
 
@@ -678,7 +681,7 @@ function refreshExportOptions() {
   options.hidden = settings.format !== "pdf";
   if (options.hidden || !resultData) return;
 
-  buildPrintSheets(settings.unit, settings.compact);
+  buildPrintSheets(settings.unit, settings.density);
   const over = oversizedSheets(settings.paper);
   clearPrintSheets();
 
@@ -698,7 +701,7 @@ function exportResult() {
   if (settings.format === "pdf") {
     // 印刷ダイアログで「PDF として保存」を選んでもらう。画面と同じ CSS で
     // 描かれるので、レールの色も年次の濃淡もそのまま紙に載る。
-    buildPrintSheets(settings.unit, settings.compact);
+    buildPrintSheets(settings.unit, settings.density);
     applyPaper(settings.paper);
     window.print();
     return;

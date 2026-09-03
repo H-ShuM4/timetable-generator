@@ -178,19 +178,16 @@ def test_each_sheet_holds_only_its_own_subjects(run_js):
         ], key
 
 
-def test_the_compact_layout_is_switched_by_a_class(run_js):
-    """1 行カードは印刷スタイル側で当てる。組み立ては 1 本のまま。"""
+def test_the_density_choice_is_carried_by_a_class(run_js):
+    """詰め方は 3 段階。組み立ては 1 本のまま、見せ方だけ CSS で変える。
+
+    区分まで入れると横幅を食うので、学科ごとの横並び（幅が半分）では
+    入りきらない。落とす選択肢が要る。
+    """
     out = run_js("timetable_render.js")
     assert out["print_term"]["compact_class"] == "compact"
+    assert out["print_slim"]["compact_class"] == "compact slim"
     assert out["print_full"]["compact_class"] == ""
-
-
-def test_the_teacher_name_travels_on_the_card_name(run_js):
-    """1 行カードで教員名を同じ行へ出すのに要る。
-
-    attr() は自分の属性しか読めないので .card ではなく .card-name に置く。
-    """
-    assert run_js("timetable_render.js")["print_term"]["teacher_on_name"] is True
 
 
 def test_a_subject_name_cannot_inject_markup_into_a_print_sheet(run_js):

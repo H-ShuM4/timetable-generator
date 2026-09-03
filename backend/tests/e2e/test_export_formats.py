@@ -77,7 +77,7 @@ def test_the_page_count_is_told_before_printing(page: Page, live_server, sample_
     choose(page, format="pdf", unit="term", paper="a3", density="compact")
     expect(page.locator("#export-note")).to_contain_text("1 枚に収まります")
 
-    choose(page, paper="a4", density="full")
+    choose(page, paper="a4", density="full")  # 2 行カードは A4 に入らない
     expect(page.locator("#export-note")).to_contain_text("収まりません")
     expect(page.locator("#export-note")).to_have_class("hint warn")
 
@@ -112,11 +112,41 @@ def test_the_print_view_keeps_the_colours_that_carry_meaning(
     assert chip not in ("rgba(0, 0, 0, 0)", "transparent"), "年次チップの濃淡が消えている"
 
 
-def test_excel_is_still_the_default_and_still_downloads(page: Page, live_server, sample_xlsx):
+def test_pdf_is_the_default_because_that_is_what_the_office_distributes(
+    page: Page, live_server, sample_xlsx
+):
+    """事務局は最終的に PDF にして学生へ配布している。既定をそちらに置く。"""
     generate_in_mock_mode(page, live_server, sample_xlsx)
 
-    expect(page.locator("#export-format")).to_have_value("xlsx")
+    expect(page.locator("#export-format")).to_have_value("pdf")
+    expect(page.locator("#export-options")).to_be_visible()
+
+
+def test_excel_still_downloads_when_chosen(page: Page, live_server, sample_xlsx):
+    generate_in_mock_mode(page, live_server, sample_xlsx)
+
+    choose(page, format="xlsx")
     expect(page.locator("#export-options")).to_be_hidden()
     with page.expect_download() as download:
         page.locator("#export-button").click()
     assert download.value.suggested_filename.endswith(".xlsx")
+
+
+def test_the_category_fits_the_term_layout_but_not_the_side_by_side_one(
+    page: Page, live_server, sample_xlsx
+):
+    """区分まで入れると横幅を食う。学科ごとは表の幅が半分なので入りきらない。
+
+    短縮（必／選／選必）でも 1.2 ページだったので、落とす選択肢を用意した。
+    """
+    page.add_init_script(RECORD_PRINT)
+    generate_in_mock_mode(page, live_server, sample_xlsx)
+
+    choose(page, format="pdf", paper="a3", unit="term", density="compact")
+    expect(page.locator("#export-note")).to_contain_text("1 枚に収まります")
+
+    choose(page, unit="department")
+    expect(page.locator("#export-note")).to_contain_text("収まりません")
+
+    choose(page, density="slim")
+    expect(page.locator("#export-note")).to_contain_text("1 枚に収まります")

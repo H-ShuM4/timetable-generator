@@ -124,9 +124,9 @@ const forPrinting = {
   violations: [],
 };
 
-function printCase(unit, compact) {
+function printCase(unit, density) {
   const sandbox = load(forPrinting);
-  sandbox.buildPrintSheets(unit, compact);
+  sandbox.buildPrintSheets(unit, density);
   const box = sandbox.document.nodes["print-sheets"];
   const html = box.innerHTML;
   const out = {
@@ -141,7 +141,6 @@ function printCase(unit, compact) {
     has_escaped_tag: html.includes("&lt;img"),
     has_intensive: html.includes("集中の科目"),
     has_stamp: html.includes("print-stamp"),
-    teacher_on_name: /class="card-name"[\s\S]{0,40}data-teacher=/.test(html),
   };
   sandbox.clearPrintSheets();
   out.cleared = box.innerHTML === "" && box.className === "";
@@ -223,9 +222,10 @@ function run() {
   const nameAt = dangerous.indexOf('class="card-name"');
   out.escaped_sample = dangerous.slice(nameAt, nameAt + 80);
 
-  out.print_term = printCase("term", true);
-  out.print_department = printCase("department", true);
-  out.print_full = printCase("term", false);
+  out.print_term = printCase("term", "compact");
+  out.print_department = printCase("department", "compact");
+  out.print_full = printCase("term", "full");
+  out.print_slim = printCase("term", "slim");
 
   return out;
 }
