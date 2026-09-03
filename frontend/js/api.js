@@ -1,5 +1,13 @@
 "use strict";
 
+// サーバとのやりとりを 1 か所に集める。
+//
+// **fetch を書くのはこのファイルだけにする。** 各画面が直に叩くと、
+// エラーの出し方（サーバが返す detail の拾い方）が画面ごとにばらけ、
+// 事務局に届く文言が場所によって変わってしまう。
+//
+// window.appState.sessionId は「いま扱っている読み込みデータ」を指す。
+// 読込・生成・結果の 3 画面が同じものを見るため、大域に 1 つだけ置く。
 window.appState = { sessionId: null };
 
 async function request(path, options) {
