@@ -158,3 +158,42 @@ def test_an_unplaced_subject_can_be_placed_by_dragging(
     assert page.evaluate("() => resultData.unplaced.length") == 0
     assert warnings == [], f"配置できたのに警告が出た: {warnings}"
     assert errors == [], f"画面が例外を投げた: {errors}"
+
+
+def test_dropping_something_that_is_not_a_card_is_ignored(
+    page: Page, live_server, sample_xlsx
+):
+    """画面の外から来たものを落としても、黙って例外を投げない。
+
+    グリッドは 5 日 × 5 限すべてが落とし先である。事務局が科目名を
+    範囲選択したまま滑らせたり、Excel をうっかり画面へ落としたりすると
+    ここへ届く。掴み手はカードとは限らない。
+
+    **落とす側は async なので、投げても pageerror として届くまでに間が
+    ある。** 待たずに検べると、壊れていても素通りする（実際そうなった）。
+    ここでは画面の側で拒否理由を捕まえて、その有無を見る。
+    """
+    generate_in_mock_mode(page, live_server, sample_xlsx)
+    warnings = []
+    page.on("dialog", lambda dialog: (warnings.append(dialog.message), dialog.accept()))
+
+    before = page.evaluate("() => resultData.placements.length")
+    rejected = page.evaluate("""async () => {
+      const failures = [];
+      const catcher = (event) => { failures.push(String(event.reason)); };
+      window.addEventListener("unhandledrejection", catcher);
+
+      const transfer = new DataTransfer();
+      transfer.setData("text/plain", "情報リテラシーⅠ【A】");   // 選択したテキスト
+      document.querySelector("#timetable-grid td")
+        .dispatchEvent(new DragEvent("drop", { dataTransfer: transfer, bubbles: true }));
+
+      // 拒否はマイクロタスクで届く。1 回まわしてから数える。
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      window.removeEventListener("unhandledrejection", catcher);
+      return failures;
+    }""")
+
+    assert rejected == [], f"画面が例外を投げた: {rejected}"
+    assert warnings == [], f"関係のないものに警告を出した: {warnings}"
+    assert page.evaluate("() => resultData.placements.length") == before

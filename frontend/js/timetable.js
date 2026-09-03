@@ -430,10 +430,23 @@ function attachDragHandlers() {
     cell.addEventListener("drop", async (event) => {
       event.preventDefault();
       cell.classList.remove("dragover");
-      const payload = JSON.parse(event.dataTransfer.getData("text/plain"));
+      // 落とし先はグリッド全面なので、掴み手はカードとは限らない。選択した
+      // テキストや Excel も届く。素性の分からないものは黙って見送る。
+      const payload = ourPayload(event.dataTransfer.getData("text/plain"));
+      if (!payload) return;
       await moveCard(payload.code, payload.grabbed, cell.dataset.slot);
     });
   });
+}
+
+/** 画面のカードが積んだ荷物なら中身を返す。それ以外は null。 */
+function ourPayload(text) {
+  try {
+    const payload = JSON.parse(text);
+    return payload && typeof payload.code === "string" ? payload : null;
+  } catch {
+    return null;
+  }
 }
 
 function shiftedSlots(placement, grabbedLabel, targetLabel) {
