@@ -47,7 +47,8 @@ def live_server(tmp_path_factory) -> str:
     """テスト専用の保存先を持つ uvicorn を起こし、URL を返す。
 
     `TIMETABLE_DATA_DIR` を渡すのが要点。これを忘れると
-    `backend/data/sessions`（上限 20 件）と `backend/logs` へ書き込み、
+    `backend/data/sessions`（`session_store.MAX_SESSIONS` 件まで）と
+    `backend/logs` へ書き込み、
     事務局が保存した時間割を実行のたびに追い出す。親の conftest の
     `isolated_storage` は monkeypatch なので別プロセスには届かない。
     """

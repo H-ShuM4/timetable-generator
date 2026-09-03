@@ -103,7 +103,7 @@ const withInheritSkips = {
   ],
 };
 
-// 印刷用シートの検証。学科 × 学期の 6 通りと、学科ごとの前後期横並び。
+// 印刷用シートの検証。学科 × 学期の 6 通りと、末尾の集中講義。
 const forPrinting = {
   placements: [
     placement("P1", "経営前期の科目", 1, ["月1"], { department: "経営", term: "前期" }),

@@ -5,7 +5,8 @@
 環境変数で逃がせるようにしてあるのは、E2E テストがサーバを**別プロセス**
 で起動するためである。`tests/conftest.py` の `isolated_storage` は
 monkeypatch なので別プロセスには届かず、そのままでは保存済みセッション
-（上限 20 件）とログを実行のたびに追い出してしまう。
+（`session_store.MAX_SESSIONS` 件まで）とログを実行のたびに追い出して
+しまう。
 """
 import os
 from pathlib import Path

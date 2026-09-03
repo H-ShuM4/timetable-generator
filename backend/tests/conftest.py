@@ -13,9 +13,9 @@ def isolated_storage(tmp_path_factory, monkeypatch):
     """テストが実運用のセッションとログに触れないようにする。
 
     セッションもログも件数の上限を持ち、古いものから消える。テストは
-    1 回で 20 件以上作るため、そのまま走らせると**事務局が保存した
-    時間割とログを追い出してしまう**。実際に AI モードの結果を 1 つ
-    失った。
+    1 回でその上限をはるかに超える数を作るため、そのまま走らせると
+    **事務局が保存した時間割とログを追い出してしまう**。実際に AI
+    モードの結果を 1 つ失った。
     """
     from app import session_store
     from app.logging import session_logger

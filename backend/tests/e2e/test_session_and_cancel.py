@@ -16,7 +16,8 @@ def test_a_saved_session_survives_a_cleared_local_storage(
     page: Page, live_server, sample_xlsx
 ):
     """localStorage の 1 件だけが頼りだと、それを消した途端に過去の
-    結果へ手が届かなくなる。サーバには最大 20 件残っている。"""
+    結果へ手が届かなくなる。サーバには `session_store.MAX_SESSIONS` 件
+    残っている。"""
     generate_in_mock_mode(page, live_server, sample_xlsx)
     expect(page.locator("#timetable-grid .card").first).to_be_visible()
 

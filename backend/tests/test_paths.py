@@ -24,7 +24,8 @@ def test_every_store_follows_the_root(tmp_path):
 
     E2E はサーバを別プロセスで起動するので conftest の monkeypatch が
     届かない。1 つでも取りこぼすと、実行のたびに `backend/data/sessions`
-    （上限 20 件）へ書き込み、事務局が保存した時間割を追い出す。
+    （`session_store.MAX_SESSIONS` 件まで）へ書き込み、事務局が保存した
+    時間割を追い出す。
     別プロセスで確かめる以外に確かめようがない。
     """
     code = (
