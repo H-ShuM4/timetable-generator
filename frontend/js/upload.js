@@ -45,8 +45,11 @@ function renderFileAssignment() {
   });
 
   const roles = new Set(selectedFiles.map((entry) => entry.role));
-  document.getElementById("upload-button").disabled =
-    !(roles.has("curriculum") && roles.has("teachers"));
+  const ready = roles.has("curriculum") && roles.has("teachers");
+  document.getElementById("upload-button").disabled = !ready;
+  // 押せない理由を出しておく。押せるようになったら引っ込める。
+  const hint = document.getElementById("upload-hint");
+  if (hint) hint.hidden = ready;
 }
 
 function addFiles(fileList) {

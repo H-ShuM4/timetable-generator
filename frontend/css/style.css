@@ -855,3 +855,105 @@ body.log-open { padding-bottom: calc(3.5rem + var(--log-height)); }
   color: var(--amber);
 }
 .notice span { display: inline-block; font-weight: 400; color: var(--ink); }
+
+/* ------------------------------------------------ 結果画面の読みやすさ */
+
+/* 3 つの切替が同じ見た目で並ぶと、どれが何の軸か推測が要る。
+   群ごとに何を選んでいるのかを小さく添える。 */
+.axis { display: flex; align-items: center; gap: 0.5rem; }
+.axis-label {
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+/* カードの読み方。README にしか無く、画面で確かめられなかった。 */
+.legend { margin: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.legend dt {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.legend dd {
+  margin: 0.25rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+}
+.legend .key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--ink);
+}
+.rail-chip {
+  width: 5px;
+  height: 1rem;
+  border-radius: 2px;
+  background: var(--src-solver);
+  flex: none;
+}
+.rail-chip.src-prelock { background: var(--src-prelock); }
+.rail-chip.src-gemini { background: var(--src-gemini); }
+.rail-chip.src-solver { background: var(--src-solver); }
+.rail-chip.src-manual { background: var(--src-manual); }
+.rail-chip.src-inherited { background: var(--src-inherited); }
+/* 高さの説明は色を伏せ、塗り分けだけが違って見えるようにする */
+.rail-chip.half-top,
+.rail-chip.half-bottom {
+  background-color: var(--src-solver);
+  background-image: linear-gradient(var(--rule-soft) 0 0);
+  background-repeat: no-repeat;
+  background-size: 100% 50%;
+}
+.rail-chip.half-top { background-position: bottom; }
+.rail-chip.half-bottom { background-position: top; }
+
+.year-chip {
+  width: 1.125rem;
+  height: 0.875rem;
+  border-radius: 2px;
+  background: var(--year-1);
+  border: 1px solid var(--year-2);
+  flex: none;
+}
+.year-chip.y2 { background: var(--year-2); border-color: var(--year-2); }
+.year-chip.y3 { background: var(--year-3); border-color: var(--year-3); }
+.year-chip.y4 { background: var(--year-4); border-color: var(--year-4); }
+
+/* ------------------------------------------------ モード選択と導線 */
+
+/* 3 つの違いが画面から分からず、README を見に行くことになっていた。
+   縦に積んで 1 行の説明を添え、選ぶ前に何が起きるか分かるようにする。 */
+#mode-select {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+#mode-select label {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+#mode-select label:hover:not(:has(:disabled)) { background: var(--indigo-wash); }
+#mode-select label:has(:checked) { background: var(--indigo-wash); }
+#mode-select label:has(:disabled) { cursor: not-allowed; opacity: 0.5; }
+.mode-name { font-size: 0.9375rem; font-weight: 700; }
+#mode-select label:has(:checked) .mode-name { color: var(--indigo-deep); }
+.mode-note { font-size: 0.8125rem; color: var(--ink-soft); }
+
+/* 押せないボタンの理由をその場に置く。押せるようになったら消す。 */
+#upload-hint { margin-top: 0.5rem; }
+
+/* キーボードで操作したとき、いまどこにいるかを必ず見せる。 */
+:where(button, select, input, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+  border-radius: 3px;
+}

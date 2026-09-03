@@ -95,6 +95,9 @@ function renderTabs() {
     currentTeacher = visible[0];
   }
 
+  // 3 つの切替が同じ見た目で並ぶと、どれが何の軸なのか推測が要る。
+  // 群ごとに何を選んでいるのかを小さく添える。
+  const axisLabel = currentView === "department" ? "学科" : "教員";
   const axis = currentView === "department"
     ? `<div class="group">
          ${departments.map((d) => `
@@ -112,17 +115,26 @@ function renderTabs() {
        </div>`;
 
   document.getElementById("result-tabs").innerHTML = `
-    <div class="group view-switch">
-      <button class="view-tab${currentView === "department" ? " active" : ""}"
-              data-view-mode="department">学科別</button>
-      <button class="view-tab${currentView === "teacher" ? " active" : ""}"
-              data-view-mode="teacher">教員別</button>
+    <div class="axis">
+      <span class="axis-label">表示</span>
+      <div class="group view-switch">
+        <button class="view-tab${currentView === "department" ? " active" : ""}"
+                data-view-mode="department">学科別</button>
+        <button class="view-tab${currentView === "teacher" ? " active" : ""}"
+                data-view-mode="teacher">教員別</button>
+      </div>
     </div>
-    ${axis}
-    <div class="group">
-      ${terms.map((t) => `
-        <button class="term-tab${t === currentTerm ? " active" : ""}"
-                data-term="${t}">${t}</button>`).join("")}
+    <div class="axis">
+      <span class="axis-label">${escapeHtml(axisLabel)}</span>
+      ${axis}
+    </div>
+    <div class="axis">
+      <span class="axis-label">学期</span>
+      <div class="group">
+        ${terms.map((t) => `
+          <button class="term-tab${t === currentTerm ? " active" : ""}"
+                  data-term="${t}">${t}</button>`).join("")}
+      </div>
     </div>`;
 
   document.querySelectorAll(".view-tab").forEach((button) => {
