@@ -275,20 +275,31 @@ input:focus, select:focus { border-color: var(--indigo-dim); }
 
 /* ---------------------------------------------------------------- 読込 */
 
+/* 中身を 1 本の軸に揃える。text-align だけだと、行ごとに幅が違うときに
+   同じ中心へ乗っているかが環境によって分かりにくかった。フレックスで
+   軸そのものを揃え、行の幅に依らず必ず中央に来るようにする。 */
 #dropzone {
   border: 1.5px dashed var(--rule);
   border-radius: var(--radius);
   padding: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
   text-align: center;
   background: var(--surface);
   transition: border-color 0.12s, background 0.12s;
 }
+#dropzone > * { max-width: 46rem; }
 #dropzone.dragover { border-color: var(--indigo); background: var(--indigo-wash); }
-#dropzone p { margin: 0 0 0.5rem; }
+#dropzone p { margin: 0; }
 
-/* 入力域と実行ボタンの間は広く取る。誤って押す事故を減らす。 */
+/* 割り当ての一覧は、上下の空きをそろえる。片方だけ広いと、
+   どこまでが 1 つのまとまりなのか読み取りにくい。 */
 #file-assign:not(:empty) { margin-top: 1.25rem; }
-#upload-button { margin-top: 1.5rem; }
+/* 最終行の下マージンが残ると、下だけ広く見える（上 20px に対し下 34px）。 */
+#file-assign .field:last-child { margin-bottom: 0; }
+#upload-button { margin-top: 1.25rem; }
 /* モード選択・重み付け・実行ボタンの間隔を同じにする。
    詰まって見える箇所と空きすぎる箇所が混ざると落ち着かない。 */
 #mode-select {
@@ -680,8 +691,6 @@ body.log-open { padding-bottom: calc(3.5rem + var(--log-height)); }
 /* 教員は 99 名いる。プルダウンだけでは目当ての先生まで延々スクロールする
    ので、氏名の一部で絞り込めるようにし、何名に絞れたかを右に出す。 */
 .teacher-pick { display: flex; align-items: center; gap: 0.5rem; }
-.teacher-pick label { display: flex; align-items: center; gap: 0.5rem; }
-.pick-label { font-size: 0.8125rem; color: var(--ink-soft); }
 #teacher-search {
   width: 9rem;
   font: inherit;
@@ -694,13 +703,6 @@ body.log-open { padding-bottom: calc(3.5rem + var(--log-height)); }
 }
 #teacher-search:focus-visible { outline: 2px solid var(--indigo-dim); outline-offset: 1px; }
 #teacher-select { font-size: 0.875rem; padding: 0.3125rem 0.5rem; }
-.teacher-count {
-  font-family: var(--font-data);
-  font-size: 0.75rem;
-  color: var(--ink-faint);
-  min-width: 3.5rem;
-}
-.teacher-count.empty { color: var(--amber); }
 .teacher-pick select { min-width: 11rem; }
 
 #teacher-panel {
@@ -860,14 +862,6 @@ body.log-open { padding-bottom: calc(3.5rem + var(--log-height)); }
 
 /* 3 つの切替が同じ見た目で並ぶと、どれが何の軸か推測が要る。
    群ごとに何を選んでいるのかを小さく添える。 */
-.axis { display: flex; align-items: center; gap: 0.5rem; }
-.axis-label {
-  font-size: 0.6875rem;
-  letter-spacing: 0.08em;
-  color: var(--ink-faint);
-  white-space: nowrap;
-}
-
 /* カードの読み方。README にしか無く、画面で確かめられなかった。 */
 .legend { margin: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .legend dt {
@@ -910,18 +904,6 @@ body.log-open { padding-bottom: calc(3.5rem + var(--log-height)); }
 }
 .rail-chip.half-top { background-position: bottom; }
 .rail-chip.half-bottom { background-position: top; }
-
-.year-chip {
-  width: 1.125rem;
-  height: 0.875rem;
-  border-radius: 2px;
-  background: var(--year-1);
-  border: 1px solid var(--year-2);
-  flex: none;
-}
-.year-chip.y2 { background: var(--year-2); border-color: var(--year-2); }
-.year-chip.y3 { background: var(--year-3); border-color: var(--year-3); }
-.year-chip.y4 { background: var(--year-4); border-color: var(--year-4); }
 
 /* ------------------------------------------------ モード選択と導線 */
 

@@ -11,30 +11,23 @@ def test_inherit_is_available_when_both_previous_files_arrived(run_js):
     assert row["note_hidden"] is True
 
 
-def test_inherit_is_blocked_when_the_previous_teacher_list_is_missing(run_js):
-    """時間割だけでは 1 件も引き継がれない。
+def test_inherit_is_blocked_when_either_previous_file_is_missing(run_js):
+    """片方だけでは 1 件も引き継がれない。
 
-    研究日の比較が「前年度＝なし」対「今年度＝あり」となって全専任が
-    組み替え対象へ落ちる。実データでは 613 件中 613 件が組み替えになる。
+    時間割が無ければ全科目が新規扱いになり、教員一覧が無ければ研究日の
+    比較が「前年度＝なし」対「今年度＝あり」となって全専任が組み替え対象へ
+    落ちる。実データではどちらも 613 件中 613 件が組み替えになる。
+
+    文言は事務局の指定どおり、どちらが欠けていても同じ案内を出す。
+    2 つ要ることと、片方では引き継げないことが伝わればよい。
     """
-    row = run_js("retarget_panel.js")["timetable_only"]
-    assert row["inherit_disabled"] is True
-    assert "前年度の教員一覧" in row["note"]
-    assert "前年度の時間割" not in row["note"], "足りているものを求めない"
-
-
-def test_inherit_is_blocked_when_the_previous_timetable_is_missing(run_js):
-    row = run_js("retarget_panel.js")["teachers_only"]
-    assert row["inherit_disabled"] is True
-    assert "前年度の時間割" in row["note"]
-    assert "前年度の教員一覧" not in row["note"]
-
-
-def test_both_missing_files_are_named(run_js):
-    row = run_js("retarget_panel.js")["neither"]
-    assert row["inherit_disabled"] is True
-    assert "前年度の時間割" in row["note"]
-    assert "前年度の教員一覧" in row["note"]
+    out = run_js("retarget_panel.js")
+    for key in ("timetable_only", "teachers_only", "neither"):
+        row = out[key]
+        assert row["inherit_disabled"] is True, key
+        assert "時間割" in row["note"] and "教員一覧" in row["note"], key
+        assert "2 つとも読み込んでください" in row["note"], key
+        assert "片方だけでは" in row["note"], key
 
 
 def test_nothing_loaded_yet_also_blocks_inherit(run_js):
@@ -118,6 +111,7 @@ def test_ai_mode_is_blocked_without_an_api_key(run_js):
     assert row["ai_disabled"] is True
     assert "API キー" in row["note"]
     assert "設定" in row["note"], "どこで登録するかまで書く"
+    assert "画面右上" in row["note"]
 
 
 def test_selecting_ai_without_a_key_falls_back_to_mock(run_js):

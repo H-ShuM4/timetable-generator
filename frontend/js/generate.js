@@ -35,9 +35,9 @@ function updateInheritAvailability() {
   // textContent なのでエスケープは要らない（文言はこちらが決めた固定文字列）
   note.hidden = false;
   note.textContent =
-    `踏襲モードには ${missing.join(" と ")} が要ります。`
-    + "「① ファイル読込」へ戻り、一緒に読み込んでください。"
-    + "（片方だけでは 1 件も引き継がれません）";
+    "踏襲モード　前年度の「時間割」と「教員一覧」の 2 つのファイルが必要です。"
+    + "「1 ファイル読込」から、2 つとも読み込んでください。"
+    + "※片方だけでは前年度の内容を引き継げません。";
   // 押せないモードが選ばれたままにしない
   if (radio.checked) {
     document.querySelector('input[name="mode"][value="mock"]').checked = true;
@@ -123,8 +123,8 @@ function updateAiAvailability(settings) {
   }
   note.hidden = false;
   note.textContent =
-    "AI モードには Gemini の API キーが要ります。"
-    + "右上の「設定」で登録してください。";
+    "AI モード　Gemini の API キーが必要です。"
+    + "画面右上の「設定」から登録してください。";
   if (radio.checked) {
     document.querySelector('input[name="mode"][value="mock"]').checked = true;
   }

@@ -60,18 +60,14 @@ function teacherOptionsHtml(teachers) {
 function applyTeacherFilter() {
   const matched = teachersWithClasses().filter((n) => matchesTeacher(n, teacherFilter));
   const select = document.getElementById("teacher-select");
-  const count = document.getElementById("teacher-count");
   if (!select) return matched;
 
   if (matched.length && !matched.includes(currentTeacher)) {
     currentTeacher = matched[0];
   }
   select.innerHTML = teacherOptionsHtml(matched);
+  // 該当が無いことは、選べる項目が無いことで伝わる。件数は出さない。
   select.disabled = matched.length === 0;
-  if (count) {
-    count.textContent = matched.length ? `${matched.length} 名` : "該当なし";
-    count.classList.toggle("empty", matched.length === 0);
-  }
   return matched;
 }
 
@@ -95,9 +91,6 @@ function renderTabs() {
     currentTeacher = visible[0];
   }
 
-  // 3 つの切替が同じ見た目で並ぶと、どれが何の軸なのか推測が要る。
-  // 群ごとに何を選んでいるのかを小さく添える。
-  const axisLabel = currentView === "department" ? "学科" : "教員";
   const axis = currentView === "department"
     ? `<div class="group">
          ${departments.map((d) => `
@@ -105,36 +98,23 @@ function renderTabs() {
                    data-dept="${d}">${escapeHtml(d)}</button>`).join("")}
        </div>`
     : `<div class="group teacher-pick">
-         <label>
-           <span class="pick-label">教員</span>
-           <input type="search" id="teacher-search" placeholder="氏名で絞り込む"
-                  value="${escapeHtml(teacherFilter)}" autocomplete="off">
-         </label>
+         <input type="search" id="teacher-search" placeholder="氏名で絞り込む"
+                value="${escapeHtml(teacherFilter)}" autocomplete="off">
          <select id="teacher-select">${teacherOptionsHtml(visible)}</select>
-         <span id="teacher-count" class="teacher-count"></span>
        </div>`;
 
   document.getElementById("result-tabs").innerHTML = `
-    <div class="axis">
-      <span class="axis-label">表示</span>
-      <div class="group view-switch">
-        <button class="view-tab${currentView === "department" ? " active" : ""}"
-                data-view-mode="department">学科別</button>
-        <button class="view-tab${currentView === "teacher" ? " active" : ""}"
-                data-view-mode="teacher">教員別</button>
-      </div>
+    <div class="group view-switch">
+      <button class="view-tab${currentView === "department" ? " active" : ""}"
+              data-view-mode="department">学科別</button>
+      <button class="view-tab${currentView === "teacher" ? " active" : ""}"
+              data-view-mode="teacher">教員別</button>
     </div>
-    <div class="axis">
-      <span class="axis-label">${escapeHtml(axisLabel)}</span>
-      ${axis}
-    </div>
-    <div class="axis">
-      <span class="axis-label">学期</span>
-      <div class="group">
-        ${terms.map((t) => `
-          <button class="term-tab${t === currentTerm ? " active" : ""}"
-                  data-term="${t}">${t}</button>`).join("")}
-      </div>
+    ${axis}
+    <div class="group">
+      ${terms.map((t) => `
+        <button class="term-tab${t === currentTerm ? " active" : ""}"
+                data-term="${t}">${t}</button>`).join("")}
     </div>`;
 
   document.querySelectorAll(".view-tab").forEach((button) => {
@@ -324,6 +304,9 @@ function renderSide() {
       .join("") || "<li>違反はありません</li>";
 
   renderInheritSkipped();
+
+  // 未配置は「あれば手を打つ」もの。0 件のときに場所を取らせない。
+  document.getElementById("block-unplaced").open = resultData.unplaced.length > 0;
 
   setCount("count-unplaced", resultData.unplaced.length);
   setCount("count-intensive", resultData.intensive.length);

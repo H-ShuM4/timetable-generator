@@ -39,8 +39,9 @@ def test_inherit_is_blocked_until_the_previous_year_files_arrive(
 
     note = page.locator("#inherit-note")
     expect(note).to_be_visible()
-    expect(note).to_contain_text("前年度の時間割")
-    expect(note).to_contain_text("前年度の教員一覧")
+    expect(note).to_contain_text("時間割")
+    expect(note).to_contain_text("教員一覧")
+    expect(note).to_contain_text("2 つとも読み込んでください")
 
     # モックは従来どおり選ばれたままで、生成もできる
     expect(page.locator('input[name="mode"][value="mock"]')).to_be_checked()

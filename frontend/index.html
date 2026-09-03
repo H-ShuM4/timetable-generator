@@ -56,17 +56,17 @@
         <label>
           <input type="radio" name="mode" value="mock" checked>
           <span class="mode-name">モックモード</span>
-          <span class="mode-note">このパソコンだけで作る／数秒</span>
+          <span class="mode-note">とにかく早く作る／数秒</span>
         </label>
         <label>
           <input type="radio" name="mode" value="optimize">
           <span class="mode-name">AI モード</span>
-          <span class="mode-note">Gemini に配置を考えさせる／数分</span>
+          <span class="mode-note">Gemini に最適な配置を考えてもらう／数分</span>
         </label>
         <label>
           <input type="radio" name="mode" value="inherit">
           <span class="mode-name">踏襲モード</span>
-          <span class="mode-note">前年度を引き継ぐ／前年度の 2 本が要る</span>
+          <span class="mode-note">前年度と同じ配置で作る／前年度データが必要</span>
         </label>
       </div>
       <!-- 前年度の 2 本がそろわないと踏襲は 1 件も働かない。選べるのに
@@ -118,7 +118,7 @@
         <aside id="result-side">
           <!-- カードの読み方は README にしか無く、画面で確かめられなかった。
                色の意味を毎回思い出させるより、その場に置くほうが速い。 -->
-          <details class="side-block" id="block-legend">
+          <details class="side-block" id="block-legend" open>
             <summary>カードの見方</summary>
             <dl class="legend">
               <dt>左端の線の色</dt>
@@ -135,20 +135,13 @@
                 <span class="key"><i class="rail-chip half-bottom"></i>後半だけ</span>
                 <span class="key"><i class="rail-chip"></i>学期を通して</span>
               </dd>
-              <dt>年次のチップ</dt>
-              <dd>
-                <span class="key"><i class="year-chip y1"></i>1 年</span>
-                <span class="key"><i class="year-chip y2"></i>2 年</span>
-                <span class="key"><i class="year-chip y3"></i>3 年</span>
-                <span class="key"><i class="year-chip y4"></i>4 年</span>
-              </dd>
             </dl>
           </details>
           <details class="side-block" id="block-violations" open>
             <summary>制約違反 <span class="count" id="count-violations">0</span></summary>
             <ul id="violation-list"></ul>
           </details>
-          <details class="side-block" id="block-unplaced" open>
+          <details class="side-block" id="block-unplaced">
             <summary>未配置科目 <span class="count" id="count-unplaced">0</span></summary>
             <p class="hint">グリッドへドラッグすると手で配置できます。</p>
             <ul id="unplaced-list"></ul>
