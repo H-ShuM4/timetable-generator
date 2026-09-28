@@ -67,9 +67,6 @@ def test_excel_goes_in_a_timetable_comes_out(page: Page, live_server, sample_xls
     assert request.value.method == "POST"
 
     # ---- ⑤ Excel 出力 ----------------------------------------------------
-    # 既定は PDF（事務局が配布に使う形）。ここで確かめたいのは
-    # ダウンロードが届くことなので、Excel を選んでから押す。
-    page.locator("#export-format").select_option("xlsx")
     with page.expect_download() as download:
         page.locator("#export-button").click()
     assert download.value.suggested_filename.endswith(".xlsx")

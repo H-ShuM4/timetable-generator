@@ -11,16 +11,17 @@
 //   renderTimetable()        サーバから結果を取り直して全部描く
 //     ├ renderTabs()         学科・学期・教員別の切り替え
 //     ├ renderTeacherPanel() 教員別のときの担当コマの内訳
-//     ├ renderGrid()         表そのもの（gridMarkup を使う）
+//     ├ renderGrid()         表そのもの
 //     ├ renderSide()         違反・未配置・集中講義などの脇の一覧
 //     └ attachDragHandlers() ここで初めて配線する
 //
-// 表を組む gridMarkup は画面と印刷で共有する。片方だけ直すと、刷った紙
-// と画面が食い違う。
-//
 // カード左端の縦線（期間レール）が、色で「誰が置いたか」、高さで「学期の
-// どこで開くか」を表す。文字で書くより速く読めるので、印刷にも残す
-// （@media print の print-color-adjust: exact がそれを支えている）。
+// どこで開くか」を表す。文字で書くより速く読めるので、色そのものに意味が
+// ある。
+//
+// **書き出しは Excel だけ。** 事務局の様式に合わせた xlsx をサーバが組む
+// （backend/app/export/excel_writer.py）。画面を印刷して PDF にする道も
+// 持っていたが、Excel で必要な体裁がそろったので畳んだ。
 const DAYS = ["月", "火", "水", "木", "金"];
 const PERIODS = [1, 2, 3, 4, 5];
 const SOURCE_LABELS = {
@@ -219,9 +220,9 @@ function visiblePlacements() {
   );
 }
 
-// 表そのものを組む。書き込み先を知らないので、画面のグリッドと印刷用の
-// シートが同じ 1 本を通る。片方だけ直すと、刷った紙と画面が食い違う。
-function gridMarkup(visible, byTeacher) {
+function renderGrid() {
+  const visible = visiblePlacements();
+  const byTeacher = currentView === "teacher";
   const violating = violatingCodes();
 
   const rows = PERIODS.map((period) => {
@@ -246,76 +247,11 @@ function gridMarkup(visible, byTeacher) {
       ${cells}</tr>`;
   }).join("");
 
-  return `
+  document.getElementById("timetable-grid").innerHTML = `
     <table class="timetable">
       <thead><tr><th></th>${DAYS.map((d) => `<th>${d}</th>`).join("")}</tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
-}
-
-function renderGrid() {
-  document.getElementById("timetable-grid").innerHTML =
-    gridMarkup(visiblePlacements(), currentView === "teacher");
-}
-
-// ---------------------------------------------------------------- 印刷
-
-const PRINT_DEPARTMENTS = ["経営", "会計", "短期大学部"];
-const PRINT_TERMS = ["前期", "後期"];
-
-function placementsIn(department, term) {
-  return resultData.placements.filter(
-    (p) => p.department === department && p.term === term
-  );
-}
-
-function printSheet(heading, body) {
-  return `<section class="print-sheet">
-    <h3 class="print-heading">${escapeHtml(heading)}</h3>
-    ${body}
-  </section>`;
-}
-
-function intensiveSheet() {
-  return printSheet("集中講義",
-    `<ul class="print-list">${
-      resultData.intensive.map((s) => `<li>${describeSubjectRef(s)}</li>`).join("")
-      || "<li>なし</li>"
-    }</ul>`);
-}
-
-/**
- * 印刷用のシートを組む。学科 × 学期で 1 枚ずつ、最後に集中講義の一覧。
- *
- * 画面の見やすさ（レールの色・年次の濃淡・BIZ UD 書体）をそのまま紙へ
- * 持っていくため、PDF はブラウザの印刷で出す。同じ CSS・同じ書体で描かれる
- * ので見た目が一致し、追加のライブラリも要らない。事務局の PC がオフライン
- * でも確実に動く。
- *
- * **組み合わせは 1 通りに決めてある。** A3 横・1 行カード（科目名・教員名・
- * 区分）で、どの区分も 1 枚に収まることを実データで確かめた（比 0.54〜0.65）。
- * 選ばせるほどの差が無いので、用紙と詰め方の切り替えは持たない。
- */
-function buildPrintSheets() {
-  if (!resultData) return;
-  const stamped = new Date().toLocaleString("ja-JP", {
-    year: "numeric", month: "long", day: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
-  document.getElementById("print-sheets").innerHTML =
-    `<p class="print-stamp">時間割自動生成システム　${escapeHtml(stamped)} 出力</p>`
-    + PRINT_DEPARTMENTS.flatMap((department) =>
-        PRINT_TERMS.map((term) => printSheet(
-          `${department}・${term}`,
-          gridMarkup(placementsIn(department, term), false)
-        ))
-      ).join("")
-    + intensiveSheet();
-}
-
-function clearPrintSheets() {
-  // 613 件ぶんのカードを抱えたままにしない。
-  document.getElementById("print-sheets").innerHTML = "";
 }
 
 function describeSubjectRef(subject) {
@@ -615,41 +551,9 @@ function initTimetable() {
     }
   });
   document.getElementById("export-button").addEventListener("click", exportResult);
-  // 印刷が終わったら（保存でも取り消しでも）組んだシートを捨てる。
-  window.addEventListener("afterprint", clearPrintSheets);
-
-  const format = document.getElementById("export-format");
-  format.value = readExportFormat();
-  format.addEventListener("change", () => saveExportFormat(format.value));
-}
-
-const EXPORT_KEY = "timetable.exportFormat";
-
-function readExportFormat() {
-  try {
-    return window.localStorage.getItem(EXPORT_KEY) === "xlsx" ? "xlsx" : "pdf";
-  } catch (error) {
-    return "pdf";
-  }
-}
-
-function saveExportFormat(value) {
-  try {
-    window.localStorage.setItem(EXPORT_KEY, value);
-  } catch (error) {
-    // 保存できなくても出力はできる
-  }
 }
 
 function exportResult() {
   if (!window.appState.sessionId) return;
-
-  if (document.getElementById("export-format").value === "pdf") {
-    // 印刷ダイアログで「PDF として保存」を選んでもらう。画面と同じ CSS で
-    // 描かれるので、レールの色も年次の濃淡もそのまま紙に載る。
-    buildPrintSheets();
-    window.print();
-    return;
-  }
   window.location.href = api.exportUrl(window.appState.sessionId);
 }

@@ -118,13 +118,8 @@
       <div class="result-toolbar">
         <div id="result-tabs"></div>
         <button id="undo-button" disabled>元に戻す</button>
-        <label class="export-pick">
-          <select id="export-format">
-            <option value="pdf">PDF（印刷）</option>
-            <option value="xlsx">Excel（.xlsx）</option>
-          </select>
-        </label>
-        <button id="export-button" class="primary">出力</button>
+        <!-- 出力は Excel だけ。事務局の様式に合わせた xlsx をサーバが組む。 -->
+        <button id="export-button" class="primary">Excel で出力</button>
       </div>
       <div id="teacher-panel" hidden></div>
       <div class="result-layout">
@@ -230,11 +225,6 @@
       <div id="settings-status"></div>
     </section>
   </main>
-
-  <!-- 印刷（PDF）専用。画面では出さず、出力ボタンを押したときだけ組む。
-       main の中に入れると .view の display:none と .grid-wrap の overflow が
-       祖先として効き、刷ったときに中身が切り落とされる。 -->
-  <div id="print-sheets"></div>
 
   <div id="log-panel" class="collapsed">
     <div id="log-header">

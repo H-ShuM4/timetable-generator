@@ -147,36 +147,3 @@ def test_a_subject_name_in_the_skipped_list_cannot_inject_markup(run_js):
     html = run_js("timetable_render.js")["skip_html"]
     assert "<img" not in html
     assert "&lt;img" in html
-
-
-def test_the_print_sheets_cover_every_department_and_term(run_js):
-    """揃いは 1 通りに決めてある。Excel と同じ 6 通り＋集中講義。
-
-    A3 横・1 行カードでどの区分も 1 枚に収まることを実データで確かめた
-    （比 0.54〜0.65）ので、用紙と詰め方は選ばせない。
-    """
-    row = run_js("timetable_render.js")["print_sheets"]
-    assert row["headings"] == [
-        "経営・前期", "経営・後期", "会計・前期", "会計・後期",
-        "短期大学部・前期", "短期大学部・後期", "集中講義",
-    ]
-    assert row["sheets"] == 7
-    assert row["tables"] == 6, "集中講義は一覧なので表にしない"
-
-
-def test_each_sheet_holds_only_its_own_subjects(run_js):
-    """絞り込みを間違えると、経営の紙に会計の科目が混ざる。"""
-    assert run_js("timetable_render.js")["print_sheets"]["codes"] == [
-        "P1", "P7", "P2", "P3", "P4", "P5", "P6"
-    ]
-
-
-def test_a_subject_name_cannot_inject_markup_into_a_print_sheet(run_js):
-    row = run_js("timetable_render.js")["print_sheets"]
-    assert row["has_raw_tag"] is False
-    assert row["has_escaped_tag"] is True
-
-
-def test_the_print_sheets_are_dropped_once_printing_is_done(run_js):
-    """613 件ぶんのカードを抱えたままにしない。"""
-    assert run_js("timetable_render.js")["print_sheets"]["cleared"] is True

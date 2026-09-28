@@ -103,48 +103,6 @@ const withInheritSkips = {
   ],
 };
 
-// 印刷用シートの検証。学科 × 学期の 6 通りと、末尾の集中講義。
-const forPrinting = {
-  placements: [
-    placement("P1", "経営前期の科目", 1, ["月1"], { department: "経営", term: "前期" }),
-    placement("P2", "経営後期の科目", 2, ["月2"], { department: "経営", term: "後期" }),
-    placement("P3", "会計前期の科目", 1, ["火1"], { department: "会計", term: "前期" }),
-    placement("P4", "会計後期の科目", 3, ["火2"], { department: "会計", term: "後期" }),
-    placement("P5", "短大前期の科目", 1, ["水1"], { department: "短期大学部", term: "前期" }),
-    placement("P6", "短大後期の科目", 2, ["水2"], { department: "短期大学部", term: "後期" }),
-    placement("P7", '<img src=x onerror=alert(1)>', 1, ["木1"],
-              { department: "経営", term: "前期" }),
-  ],
-  unplaced: [],
-  intensive: [
-    { code: "I1", name: "集中の科目", teacher: "教員丙", department: "短期大学部",
-      year: 1, term: "通年", category: "選択", slots_required: 1,
-      requires_consecutive: false },
-  ],
-  violations: [],
-};
-
-function printCase() {
-  const sandbox = load(forPrinting);
-  sandbox.buildPrintSheets();
-  const box = sandbox.document.nodes["print-sheets"];
-  const html = box.innerHTML;
-  const out = {
-    headings: (html.match(/class="print-heading">([^<]*)</g) || [])
-      .map((m) => m.match(/>([^<]*)</)[1].trim()),
-    sheets: (html.match(/class="print-sheet"/g) || []).length,
-    tables: (html.match(/class="timetable"/g) || []).length,
-    codes: attributeValues(html, "data-code"),
-    has_raw_tag: html.includes("<img"),
-    has_escaped_tag: html.includes("&lt;img"),
-    has_intensive: html.includes("集中の科目"),
-    has_stamp: html.includes("print-stamp"),
-  };
-  sandbox.clearPrintSheets();
-  out.cleared = box.innerHTML === "";
-  return out;
-}
-
 function run() {
   const out = {};
 
@@ -219,8 +177,6 @@ function run() {
   out.escaped_has_raw_quote = /data-code="[^"]*"[^>]*"x"/.test(dangerous);
   const nameAt = dangerous.indexOf('class="card-name"');
   out.escaped_sample = dangerous.slice(nameAt, nameAt + 80);
-
-  out.print_sheets = printCase();
 
   return out;
 }
