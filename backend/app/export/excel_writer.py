@@ -623,8 +623,8 @@ class _SheetWriter:
     あけるだけで別の塊だと分かる。
     """
 
-    BELOW_SPANS = ((0, 1, "year"), (2, 4, "name"), (5, 6, "teacher"),
-                   (7, 8, "room"), (9, 9, "tail"))
+    BELOW_SPANS = ((0, 0, "year"), (1, 3, "name"), (4, 5, "teacher"),
+                   (6, 7, "room"), (8, 8, "tail"))
     """下に置くときの列の割り当て（BELOW_START からの位置, 同終わり, 中身）。
 
     **短大の列幅に合わせてある。** 下へ回すのは短大だけなので、ほかの
@@ -632,8 +632,14 @@ class _SheetWriter:
     学科ごとに分ける必要がある。
 
     列幅は曜日ブロックのものをそのまま使い、足りないところは横に結合して
-    広げる。短大の B〜K は 年次・抽選・人数・科目名・備考・教員・教室・
-    必修＋次の曜日の 2 列で、結合すると科目名に 50 文字ぶんの幅が取れる。
+    広げる。**年次は 1 列のまま。** 上の表の年次と同じ幅（5.6）で「1年」が
+    収まるので、広げる理由が無い。残りを右へ送って B〜J に収める。
+
+        B     年次       5.6
+        C:E   授業科目名 48.6（抽選・人数・科目名を結合）
+        F:G   教員       22.6
+        H:I   教室       17.1
+        J     必修        5.6
     """
 
     BELOW_TITLES = {"year": "年次", "name": "授業科目名", "teacher": "教員",
@@ -733,8 +739,9 @@ class _SheetWriter:
         label.font = HEADER_FONT
         label.alignment = Alignment(horizontal="center", vertical="center",
                                     shrink_to_fit=True)
-        sheet.merge_cells(start_row=row, start_column=first,
-                          end_row=end, end_column=last)
+        if end > row or last > first:
+            sheet.merge_cells(start_row=row, start_column=first,
+                              end_row=end, end_column=last)
 
         at = row
         for group in groups:

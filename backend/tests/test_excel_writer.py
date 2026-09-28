@@ -592,3 +592,67 @@ def test_the_period_column_is_wide_enough_for_the_times(tmp_path):
     sheet = write(tmp_path, [make("A1")], {"A1": (TimeSlot("月", 1),)})["経営・前期"]
     assert sheet.column_dimensions["A"].width >= 10
     assert sheet.column_dimensions["A"].width > sheet.column_dimensions["B"].width
+
+
+def test_the_year_column_of_the_intensive_list_is_one_column(tmp_path):
+    """年次は 1 列のまま。上の表の年次と同じ幅で「1年」が収まる。
+
+    2 列ぶん結合すると、そこだけ間延びして見える。
+    """
+    subjects = [make("J1", name="ふつうの科目", department=Department.JUNIOR),
+                make("J8", name="インターンシップ1", department=Department.JUNIOR,
+                     is_intensive=True, year=1),
+                make("J9", name="インターンシップ2", department=Department.JUNIOR,
+                     is_intensive=True, year=1, teacher="教員乙")]
+    sheet = write(tmp_path, subjects, {"J1": (TimeSlot("月", 1),)},
+                  intensive_codes=["J8", "J9"])["短大・前期"]
+
+    band, year_column, name = intensive_block(sheet)
+    assert name == year_column + 1, "年次のすぐ右が科目名"
+
+    row = find_row(sheet, name, "インターンシップ1")
+    merged = {(r.min_col, r.max_col) for r in sheet.merged_cells.ranges
+              if r.min_row <= row <= r.max_row and r.min_col == year_column}
+    assert merged == {(year_column, year_column)}, \
+        "年次は横に結合しない（縦にだけ結合する）"
+
+
+def test_a_single_intensive_subject_still_gets_its_year(tmp_path):
+    """1 件しか無い年次でも、年次の欄が空にならない。
+
+    縦にも横にも広がらないので、結合する相手がいない。
+    """
+    subjects = [make("J1", name="ふつうの科目", department=Department.JUNIOR),
+                make("J9", name="ただ 1 件の集中", department=Department.JUNIOR,
+                     is_intensive=True, year=2)]
+    sheet = write(tmp_path, subjects, {"J1": (TimeSlot("月", 1),)},
+                  intensive_codes=["J9"])["短大・前期"]
+
+    _, year_column, name = intensive_block(sheet)
+    row = find_row(sheet, name, "ただ 1 件の集中")
+    assert sheet.cell(row, year_column).value == "2年"
+
+
+def test_nothing_is_merged_with_itself(tmp_path):
+    """1 セルだけの結合を書かない。
+
+    openpyxl は止めずに `<mergeCell ref="B2"/>` を書き出すが、結合は
+    2 セル以上を束ねるものなので、これは仕様から外れている。Excel が
+    「ファイルに問題が見つかりました」と修復を促すことがある。
+
+    年次の欄が 1 列になり、かつその年次に科目が 1 件しか無いときに
+    起きうる。実データでは短大の 2 年（ブライダルプロデュース 1 件）が
+    まさにその形になる。
+    """
+    subjects = [make("J1", name="ふつうの科目", department=Department.JUNIOR),
+                make("J8", name="1 年の集中", department=Department.JUNIOR,
+                     is_intensive=True, year=1),
+                make("J9", name="2 年の集中", department=Department.JUNIOR,
+                     is_intensive=True, year=2, teacher="教員乙")]
+    book = write(tmp_path, subjects, {"J1": (TimeSlot("月", 1),)},
+                 intensive_codes=["J8", "J9"])
+
+    for name in book.sheetnames:
+        alone = [str(r) for r in book[name].merged_cells.ranges
+                 if r.min_row == r.max_row and r.min_col == r.max_col]
+        assert alone == [], f"{name} に 1 セルだけの結合がある: {alone}"
