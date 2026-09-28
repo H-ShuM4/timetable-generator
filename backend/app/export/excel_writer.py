@@ -9,6 +9,10 @@
     行3  抽選│人数│授業科目名│教員│教室│備考
     行4〜 A列=時限（縦結合） B列=年次（縦結合） その下に科目を縦に並べる
 
+**教員名は Excel の元の表記で書く。** 突合には空白を落とした正規化済みの
+氏名を使うが、紙に出すのは「築　雅之」のように全角空白で姓名を分けた形に
+する。カリキュラム一覧の 97% がその形で、事務局が長年そう作ってきた。
+
 **教室・抽選・人数は空欄で出す。** カリキュラム一覧にその列が無く、埋める
 元が無い。見本のシート名が「教室入」であることからも、ここは事務局が
 あとから手で入れる欄である。枠だけ用意して渡す。
@@ -129,7 +133,15 @@ HEADER_FILL = PatternFill("solid", fgColor="D9D9D9")
 
 MEDIUM = Side(style="medium")
 DOTTED = Side(style="dotted")
-HAIR = Side(style="hair")
+
+# 横の区切りは 3 段階にする。**同じ年次の中には線を引かない。**
+#   時限のあいだ … 太い実線。紙を追うときの大きな段
+#   年次のあいだ … 点線。同じ時限の中の小さな段
+#   年次の中     … 線なし。1 科目が教員の人数ぶん行を使うので、
+#                   1 行ごとに線を引くと科目の切れ目が分からなくなる
+BETWEEN_PERIODS = MEDIUM
+BETWEEN_YEARS = DOTTED
+WITHIN_YEAR = None
 
 TITLE_ROW, DAY_ROW, HEADER_ROW, FIRST_BODY_ROW = 1, 2, 3, 4
 
@@ -138,8 +150,15 @@ DAY_HEIGHT = 27.75
 BODY_HEIGHT = 23.5
 
 
-def _frame(*, left=DOTTED, right=DOTTED, top=None, bottom=HAIR) -> Border:
+def _frame(*, left=DOTTED, right=DOTTED, top=None, bottom=None) -> Border:
     return Border(left=left, right=right, top=top, bottom=bottom)
+
+
+def _rule(*, last_row: bool, last_year: bool):
+    """その行の下に引く線を選ぶ。"""
+    if not last_row:
+        return WITHIN_YEAR
+    return BETWEEN_PERIODS if last_year else BETWEEN_YEARS
 
 
 # ---------------------------------------------------------------- 並べ替え
@@ -163,6 +182,10 @@ class Group:
     quarter: str
     category: Category
     teachers: list[str]
+    """Excel 上の元の表記（「築　雅之」のように全角空白で姓名を分けた形）。
+
+    突合に使う正規化済みの氏名ではない。事務局が長年その形で紙を作って
+    きたので、書き出すときは元に戻す。"""
 
     @property
     def height(self) -> int:
@@ -176,10 +199,11 @@ def _group(subjects: list) -> list[Group]:
     groups: list[Group] = []
     for subject in ordered:
         quarter = subject.quarter.value if subject.quarter else ""
+        shown = subject.teacher_display or subject.teacher
         if groups and groups[-1].name == subject.name and groups[-1].quarter == quarter:
-            groups[-1].teachers.append(subject.teacher)
+            groups[-1].teachers.append(shown)
             continue
-        groups.append(Group(subject.name, quarter, subject.category, [subject.teacher]))
+        groups.append(Group(subject.name, quarter, subject.category, [shown]))
     return groups
 
 
@@ -326,14 +350,15 @@ class _SheetWriter:
         row = FIRST_BODY_ROW
         for period in PERIODS:
             period_start = row
-            for year in self.years:
+            for index, year in enumerate(self.years):
+                last_year = index == len(self.years) - 1
                 groups = {day: _group(self._in_cell(day, period, year)) for day in DAYS}
                 # そのコマで最も背の高い曜日に合わせる。どの曜日も空なら 1 行。
                 height = max(1, max(sum(g.height for g in groups[day]) for day in DAYS))
                 last = row + height - 1
-                self._write_year_label(row, last, year)
+                self._write_year_label(row, last, year, last_year)
                 for day in DAYS:
-                    self._write_day(day, row, last, groups[day])
+                    self._write_day(day, row, last, groups[day], last_year)
                 row = last + 1
             self._write_period_label(period_start, row - 1, period)
         return row - 1
@@ -351,7 +376,7 @@ class _SheetWriter:
         if end > start:
             self.sheet.merge_cells(start_row=start, start_column=1, end_row=end, end_column=1)
 
-    def _write_year_label(self, start: int, end: int, year: int) -> None:
+    def _write_year_label(self, start: int, end: int, year: int, last_year: bool) -> None:
         cell = self.sheet.cell(start, 2, f"{year}年")
         cell.font = HEADER_FONT
         cell.alignment = Alignment(horizontal="center", vertical="center", shrink_to_fit=True)
@@ -359,26 +384,26 @@ class _SheetWriter:
             target = self.sheet.cell(row, 2)
             target.fill = HEADER_FILL
             target.border = _frame(left=MEDIUM, right=MEDIUM,
-                                   top=DOTTED if row == start else None,
-                                   bottom=DOTTED if row == end else None)
+                                   bottom=_rule(last_row=row == end, last_year=last_year))
             self.sheet.row_dimensions[row].height = BODY_HEIGHT
         if end > start:
             self.sheet.merge_cells(start_row=start, start_column=2, end_row=end, end_column=2)
 
-    def _write_day(self, day: str, start: int, end: int, groups: list[Group]) -> None:
+    def _write_day(self, day: str, start: int, end: int, groups: list[Group],
+                   last_year: bool) -> None:
         specs = day_columns(self.department, day)
         column_of = {spec.key: self.day_start[day] + i for i, spec in enumerate(specs)}
         block_start = self.day_start[day]
         block_end = block_start + len(specs) - 1
 
         for row in range(start, end + 1):
+            rule = _rule(last_row=row == end, last_year=last_year)
             for column in range(block_start, block_end + 1):
                 cell = self.sheet.cell(row, column)
                 cell.border = _frame(
                     left=MEDIUM if column == block_start else DOTTED,
                     right=MEDIUM if column == block_end else DOTTED,
-                    top=None,
-                    bottom=DOTTED if row == end else HAIR,
+                    bottom=rule,
                 )
 
         row = start
@@ -410,8 +435,13 @@ class _SheetWriter:
             cell = sheet.cell(start, column, value or None)
             if spec.key == "name":
                 cell.font = BODY_FONT
+                # **折り返すのは縦に結合したときだけ。** Excel では wrap が
+                # shrink を打ち消す。1 行しかないセルで折り返すと、2 行目が
+                # 行高（23.5）に隠れて読めなくなる。見本も、複数行に結合した
+                # セルにだけ wrap を付けている。
                 cell.alignment = Alignment(horizontal="left", vertical="center",
-                                           wrap_text=True, shrink_to_fit=True)
+                                           wrap_text=group.height > 1,
+                                           shrink_to_fit=True)
             else:
                 cell.font = SMALL_FONT
                 cell.alignment = Alignment(horizontal="center", vertical="center",
@@ -448,64 +478,54 @@ class _SheetWriter:
         return found
 
     def _write_intensive(self) -> int:
+        """集中の欄を組む。**科目が尽きたところで太い実線を引いて終わる。**
+
+        グリッド側は 5 時限 × 年次ぶんの高さが必ず要るが、集中はその学科・
+        学期にあるだけしか無い。下まで空の枠を伸ばすと、何も無い場所を
+        延々と目で追うことになる。
+        """
         specs = intensive_columns(self.department)
         year_column = self.intensive_start
         first = year_column + 1
         last = first + len(specs) - 1
 
-        by_year: dict[int, list[Group]] = {}
+        by_year: dict[int, list] = {}
         for subject in self._intensive():
             by_year.setdefault(subject.year, []).append(subject)
 
+        years = sorted(by_year)
         row = FIRST_BODY_ROW
-        for year in sorted(by_year):
+        for index, year in enumerate(years):
+            last_year = index == len(years) - 1
             groups = _group(by_year[year])
-            height = sum(g.height for g in groups)
-            end = row + height - 1
+            end = row + sum(g.height for g in groups) - 1
+
             label = self.sheet.cell(row, year_column, f"{year}年")
             label.font = HEADER_FONT
             label.alignment = Alignment(horizontal="center", vertical="center",
                                         shrink_to_fit=True)
             for line in range(row, end + 1):
+                rule = _rule(last_row=line == end, last_year=last_year)
                 cell = self.sheet.cell(line, year_column)
                 cell.fill = HEADER_FILL
-                cell.border = _frame(left=MEDIUM, right=DOTTED,
-                                     top=MEDIUM if line == row else None,
-                                     bottom=DOTTED if line == end else HAIR)
+                cell.border = _frame(left=MEDIUM, right=DOTTED, bottom=rule)
+                for column in range(first, last + 1):
+                    self.sheet.cell(line, column).border = _frame(
+                        left=DOTTED, right=MEDIUM if column == last else DOTTED,
+                        bottom=rule,
+                    )
+                self.sheet.row_dimensions[line].height = BODY_HEIGHT
             if end > row:
                 self.sheet.merge_cells(start_row=row, start_column=year_column,
                                        end_row=end, end_column=year_column)
 
             column_of = {spec.key: first + i for i, spec in enumerate(specs)}
-            for line in range(row, end + 1):
-                for column in range(first, last + 1):
-                    self.sheet.cell(line, column).border = _frame(
-                        left=DOTTED, right=MEDIUM if column == last else DOTTED,
-                        bottom=DOTTED if line == end else HAIR,
-                    )
             at = row
             for group in groups:
                 self._write_group(group, at, column_of, specs)
                 at += group.height
             row = end + 1
         return row - 1
-
-    def _fill_tail(self, body_end: int, intensive_end: int) -> None:
-        """短いほうの側に、罫線だけの空きを足して高さをそろえる。"""
-        bottom = max(body_end, intensive_end)
-        specs = intensive_columns(self.department)
-        first, last = self.intensive_start + 1, self.intensive_start + len(specs)
-        for row in range(intensive_end + 1, bottom + 1):
-            cell = self.sheet.cell(row, self.intensive_start)
-            cell.fill = HEADER_FILL
-            cell.border = _frame(left=MEDIUM, right=DOTTED,
-                                 bottom=MEDIUM if row == bottom else HAIR)
-            for column in range(first, last + 1):
-                self.sheet.cell(row, column).border = _frame(
-                    left=DOTTED, right=MEDIUM if column == last else DOTTED,
-                    bottom=MEDIUM if row == bottom else HAIR,
-                )
-            self.sheet.row_dimensions[row].height = BODY_HEIGHT
 
     def _set_up_printing(self, bottom: int) -> None:
         sheet = self.sheet
@@ -532,7 +552,6 @@ class _SheetWriter:
         self._write_heading()
         body_end = self._write_body()
         intensive_end = self._write_intensive()
-        self._fill_tail(body_end, intensive_end)
         self._set_up_printing(max(body_end, intensive_end))
 
 

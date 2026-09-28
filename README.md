@@ -315,7 +315,7 @@ start.bat 8001
 | `backend/tests/`  | 単体テストと E2E。`tests/js/` は Node の `vm` 上で画面の JS を直接動かす                                                          |
 | `frontend/`       | 素の HTML / CSS / JavaScript。フレームワークも CDN も使っていません（事務局 PC がオフラインやプロキシ配下でも動くようにするため） |
 | `docs/`           | 設計書と調査レポート                                                                                                              |
-| `tools/`          | 開発用の分析スクリプト。配布 zip には入りません                                                                                   |
+| `tools/`          | 開発用のスクリプト（踏襲の内訳を数える、Excel 出力の見た目を画像で確かめる）。配布 zip には入りません                                                                                   |
 
 ### 動かす
 

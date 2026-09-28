@@ -65,6 +65,14 @@ class Subject:
     category: Category
     courses: list[str] = field(default_factory=list)
     teacher: str = ""
+    """突合に使う正規化済みの氏名。空白を落とし、異体字を代表字に寄せてある。"""
+
+    teacher_display: str = ""
+    """Excel 上の元の表記。空なら `teacher` を使う。
+
+    **突合には使わない。** カリキュラム一覧の氏名は 97% が「築　雅之」の
+    ように全角空白で姓名を分けており、事務局が長年その形で紙を作ってきた。
+    Excel へ書き出すときだけ、この元の表記に戻す。"""
     is_remote: bool = False
     """Excel の `遠隔` 列が ○ か。遠隔で行うため金曜に置く（H8）。"""
 

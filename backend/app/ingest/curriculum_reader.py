@@ -211,6 +211,7 @@ def read_curriculum(path: str | Path) -> list[Subject]:
                 category=Category(str(_cell(row, columns, "科目区分")).strip()),
                 courses=_parse_courses(_course_cell(row, columns)),
                 teacher=normalize_name(_cell(row, columns, "教員氏名")),
+                teacher_display=str(_cell(row, columns, "教員氏名") or "").strip(),
                 is_remote=remote_mark == REMOTE_YES,
                 is_remote_prohibited=remote_mark == REMOTE_NO,
                 is_joint=str(_cell(row, columns, "合同(経・会)") or "").strip() == "○",

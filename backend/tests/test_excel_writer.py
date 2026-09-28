@@ -316,3 +316,125 @@ def test_the_sheet_is_set_up_for_a3_landscape(tmp_path):
     assert sheet.page_setup.fitToWidth == 1
     assert sheet.print_title_rows == "$1:$3", "見出しを各ページに繰り返す"
     assert sheet.freeze_panes == "C4"
+
+
+# ---------------------------------------------------------------- 氏名の表記
+
+def test_the_teacher_name_keeps_the_space_the_office_types(tmp_path):
+    """突合は空白を落とした形で行うが、紙に出すのは元の表記に戻す。
+
+    カリキュラム一覧の教員氏名は 97% が「築　雅之」のように全角空白で
+    姓名を分けており、事務局は長年その形で時間割を作ってきた。
+    """
+    subject = make("A1", teacher="築雅之", teacher_display="築　雅之")
+    sheet = write(tmp_path, [subject], {"A1": (TimeSlot("月", 1),)})["経営・前期"]
+
+    column = column_of(sheet, "月", "教員")
+    assert sheet.cell(FIRST_BODY_ROW, column).value == "築　雅之"
+
+
+def test_a_teacher_without_an_original_spelling_falls_back(tmp_path):
+    """元表記が空でも氏名を落とさない。"""
+    sheet = write(tmp_path, [make("A1", teacher="築雅之")],
+                  {"A1": (TimeSlot("月", 1),)})["経営・前期"]
+    assert sheet.cell(FIRST_BODY_ROW, column_of(sheet, "月", "教員")).value == "築雅之"
+
+
+# ---------------------------------------------------------------- 横の区切り
+
+def _bottom(sheet, row: int, column: int):
+    """その行の下に引かれている線の種類。引かれていなければ None。
+
+    **結合したセルでは見えない。** openpyxl は結合すると、その範囲の外枠を
+    先頭セルに写す。科目名の列は教員の人数ぶん結合されるので、行と行の
+    あいだを見るには結合していない列（教員）を見る。
+    """
+    side = sheet.cell(row, column).border.bottom
+    return side.style if side else None
+
+
+def test_the_rules_tell_periods_years_and_rows_apart(tmp_path):
+    """横の区切りは 3 段階。**同じ年次の中には線を引かない。**
+
+    1 科目が教員の人数ぶん行を使うので、1 行ごとに線を引くと科目の
+    切れ目が分からなくなる。
+    """
+    # 1 年に 2 名、2 年に 1 名。1 時限だけを埋める。
+    subjects = [
+        make("A1", name="科目甲", year=1, teacher="教員1"),
+        make("A2", name="科目甲", year=1, teacher="教員2"),
+        make("A3", name="科目乙", year=2, teacher="教員3"),
+    ]
+    sheet = write(tmp_path, subjects,
+                  {s.code: (TimeSlot("月", 1),) for s in subjects})["経営・前期"]
+
+    teacher = column_of(sheet, "月", "教員")
+    name = column_of(sheet, "月", "授業科目名")
+    first = find_row(sheet, name, "科目甲")
+
+    assert sheet.cell(first, teacher).value == "教員1"
+    assert sheet.cell(first + 1, teacher).value == "教員2"
+    assert _bottom(sheet, first, teacher) is None, "同じ年次の中には線を引かない"
+    assert _bottom(sheet, first + 1, teacher) == "dotted", "年次のあいだは点線"
+
+    # 1 時限の最後の年次（大学は 4 年）の下は太い実線になる
+    last_of_period = find_row(sheet, 2, "4年")
+    assert _bottom(sheet, last_of_period, teacher) == "medium", "時限のあいだは太い実線"
+    assert _bottom(sheet, last_of_period, 1) == "medium"
+    assert _bottom(sheet, last_of_period, 2) == "medium"
+
+
+def test_the_last_period_is_closed_off(tmp_path):
+    """5 時限の下も太い実線で閉じる。表の終わりが分かるようにする。"""
+    sheet = write(tmp_path, [make("A1")], {"A1": (TimeSlot("月", 1),)})["経営・前期"]
+    last = max(r for r in range(FIRST_BODY_ROW, sheet.max_row + 1)
+               if sheet.cell(r, 2).value or _bottom(sheet, r, 2))
+    assert _bottom(sheet, last, column_of(sheet, "月", "教員")) == "medium"
+    assert _merged_label(sheet, last, 1) == "5時限"
+
+
+# ---------------------------------------------------------------- 集中の終わり
+
+def test_the_intensive_column_stops_where_the_subjects_run_out(tmp_path):
+    """集中の欄は科目が尽きたところで太い実線を引いて終わる。
+
+    グリッド側は 5 時限 × 年次ぶんの高さが必ず要るが、集中はあるだけしか
+    無い。下まで空の枠を伸ばすと、何も無い場所を延々と目で追うことになる。
+    """
+    grid = make("A1", name="ふつうの科目")
+    intensive = make("A9", name="認定ＰＢＬ", is_intensive=True, year=1)
+    sheet = write(tmp_path, [grid, intensive], {"A1": (TimeSlot("月", 1),)},
+                  intensive_codes=["A9"])["経営・前期"]
+
+    year_column, name = intensive_block(sheet)
+    row = find_row(sheet, name, "認定ＰＢＬ")
+    assert _bottom(sheet, row, name) == "medium", "最後の科目の下は太い実線"
+
+    # その下には枠を伸ばさない
+    below = row + 1
+    assert sheet.cell(below, name).border.left.style is None
+    assert sheet.cell(below, year_column).fill.patternType is None
+    assert sheet.max_row > below, "グリッド側はまだ続いている"
+
+
+def test_a_one_line_name_shrinks_instead_of_wrapping(tmp_path):
+    """Excel では wrap が shrink を打ち消す。
+
+    1 行しかないセルで折り返すと、2 行目が行高に隠れて読めなくなる。
+    縦に結合したセルは行数ぶんの高さがあるので、そこだけ折り返す。
+    """
+    alone = make("A1", name="ネットワークシステム開発実習", year=1)
+    shared = [make(f"A{i}", name="課題研究Ⅰ", year=3, teacher=f"教員{i}")
+              for i in range(2, 4)]
+    sheet = write(tmp_path, [alone, *shared], {
+        s.code: (TimeSlot("月", 1),) for s in [alone, *shared]
+    })["経営・前期"]
+
+    name = column_of(sheet, "月", "授業科目名")
+    single = sheet.cell(find_row(sheet, name, "ネットワークシステム開発実習"), name)
+    # False は保存時に省かれ、読み戻すと None になる
+    assert not single.alignment.wrap_text
+    assert single.alignment.shrink_to_fit is True
+
+    merged = sheet.cell(find_row(sheet, name, "課題研究Ⅰ"), name)
+    assert merged.alignment.wrap_text is True, "結合したセルは折り返してよい"
