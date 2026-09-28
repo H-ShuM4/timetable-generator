@@ -656,3 +656,43 @@ def test_nothing_is_merged_with_itself(tmp_path):
         alone = [str(r) for r in book[name].merged_cells.ranges
                  if r.min_row == r.max_row and r.min_col == r.max_col]
         assert alone == [], f"{name} に 1 セルだけの結合がある: {alone}"
+
+
+def test_the_intensive_list_columns_line_up_with_the_grid_above(tmp_path):
+    """下に置いた集中の欄の列の並びと幅。
+
+    **広げるのは、結合しないと入らないものだけ。** 科目名と教員は 1 列
+    では足りないので横に結合し、年次・教室・必修は上の表で同じものが
+    入っている列の幅をそのまま使う。どれか 1 つだけ広いと、そこが
+    間延びして見える。
+
+    ここを直すときは、見た目を確かめたうえでこの表も更新すること。
+    """
+    subjects = [make("J1", name="ふつうの科目", department=Department.JUNIOR),
+                make("J9", name="集中の科目", department=Department.JUNIOR,
+                     is_intensive=True, year=1)]
+    sheet = write(tmp_path, subjects, {"J1": (TimeSlot("月", 1),)},
+                  intensive_codes=["J9"])["短大・前期"]
+    band, _, _ = intensive_block(sheet)
+
+    spans = []
+    for cell in sheet[band]:
+        if cell.value is None:
+            continue
+        stop = cell.column
+        for rng in sheet.merged_cells.ranges:
+            if rng.min_row == band and rng.min_col == cell.column:
+                stop = rng.max_col
+        width = sum(sheet.column_dimensions[
+            openpyxl.utils.get_column_letter(c)].width
+            for c in range(cell.column, stop + 1))
+        spans.append((cell.value, cell.column, stop, round(width, 1)))
+
+    assert spans == [
+        ("年次", 2, 2, 5.6),
+        ("授業科目名", 3, 5, 48.6),
+        ("教員", 6, 7, 22.6),
+        ("教室", 8, 8, 10.6),
+        ("必修", 9, 9, 6.5),
+    ]
+    assert sheet.cell(band, 1).value is None, "A 列は 1 つあける"
