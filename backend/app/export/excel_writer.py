@@ -131,7 +131,13 @@ CATEGORY = Column("category", "必修", 6.5)
 
 SPACER_WIDTH = 4.0
 YEAR_COLUMN_WIDTH = 5.6
-PERIOD_COLUMN_WIDTH = 7.6
+PERIOD_COLUMN_WIDTH = 10.5
+"""時限の列の幅。
+
+「10：30」が折り返さずに収まる幅を取る。狭いと授業時間が途中で折れて
+読めなくなる。中央に寄せるので、短い「8：50」は自然に字下がりして
+上下がそろう。
+"""
 
 INTENSIVE_HEADING = "集中"
 
@@ -609,17 +615,25 @@ class _SheetWriter:
 
     # -- 集中講義（表の下に置く場合） --------------------------------
 
-    BELOW_SPANS = ((1, 2, "year"), (3, 5, "name"), (6, 7, "teacher"),
-                   (8, 8, "room"), (9, 9, "tail"))
-    """下に置くときの列の割り当て（開始列, 終了列, 中身）。
+    BELOW_START = 2
+    """下に置く集中の欄が始まる列。
+
+    **A 列を 1 つあける。** 左端にぴったり寄せると、上の表の時限の列と
+    縦につながって見え、集中が時間割の続きのように読めてしまう。1 列
+    あけるだけで別の塊だと分かる。
+    """
+
+    BELOW_SPANS = ((0, 1, "year"), (2, 4, "name"), (5, 6, "teacher"),
+                   (7, 8, "room"), (9, 9, "tail"))
+    """下に置くときの列の割り当て（BELOW_START からの位置, 同終わり, 中身）。
 
     **短大の列幅に合わせてある。** 下へ回すのは短大だけなので、ほかの
     学科の並びは考えていない。大学も下へ回すことになったら、ここを
     学科ごとに分ける必要がある。
 
     列幅は曜日ブロックのものをそのまま使い、足りないところは横に結合して
-    広げる。短大の A〜I は 時限・年次・抽選・人数・科目名・備考・教員・
-    教室・必修 の 9 列で、結合すると科目名に 48 文字ぶんの幅が取れる。
+    広げる。短大の B〜K は 年次・抽選・人数・科目名・備考・教員・教室・
+    必修＋次の曜日の 2 列で、結合すると科目名に 50 文字ぶんの幅が取れる。
     """
 
     BELOW_TITLES = {"year": "年次", "name": "授業科目名", "teacher": "教員",
@@ -632,13 +646,18 @@ class _SheetWriter:
         表の幅いっぱいまで枠を伸ばさない。右側が空の升目で埋まると、
         まだ続きがあるように見えてしまう。
         """
-        return self.BELOW_SPANS[-1][1]
+        return self.BELOW_START + self.BELOW_SPANS[-1][1]
+
+    def below_span(self, span) -> tuple[int, int, str]:
+        """BELOW_SPANS の 1 件を、実際の列番号に直す。"""
+        first, last, key = span
+        return self.BELOW_START + first, self.BELOW_START + last, key
 
     def _write_intensive_below(self, body_end: int) -> int:
-        """表の下に 1 行あけて、左端から集中講義を並べる。
+        """表の下に 1 行あけて、左から 1 列おいて集中講義を並べる。
 
         短大は曜日ブロックが 7 列あり、右へさらに集中を継ぎ足すと 1 枚に
-        収まらないほど横長になる。下へ回して左端から始める。
+        収まらないほど横長になる。下へ回す。
         """
         subjects = self._intensive()
         if not subjects:
@@ -667,22 +686,23 @@ class _SheetWriter:
         sheet.row_dimensions[row].height = DAY_HEIGHT
         sheet.row_dimensions[row + 1].height = BODY_HEIGHT
 
-        cell = sheet.cell(row, 1, INTENSIVE_HEADING)
+        cell = sheet.cell(row, self.BELOW_START, INTENSIVE_HEADING)
         cell.font = DAY_FONT
         cell.alignment = Alignment(horizontal="center", vertical="center",
                                    shrink_to_fit=True)
-        sheet.merge_cells(start_row=row, start_column=1,
+        sheet.merge_cells(start_row=row, start_column=self.BELOW_START,
                           end_row=row, end_column=self.below_last)
-        for column in range(1, self.below_last + 1):
+        for column in range(self.BELOW_START, self.below_last + 1):
             for line in (row, row + 1):
                 target = sheet.cell(line, column)
                 target.fill = HEADER_FILL
                 target.border = _frame(
-                    left=MEDIUM if column == 1 else DOTTED,
+                    left=MEDIUM if column == self.BELOW_START else DOTTED,
                     right=MEDIUM if column == self.below_last else DOTTED,
                     top=MEDIUM, bottom=MEDIUM,
                 )
-        for start, stop, key in self.BELOW_SPANS:
+        for span in self.BELOW_SPANS:
+            start, stop, key = self.below_span(span)
             title = self.BELOW_TITLES.get(key, tail_title)
             target = sheet.cell(row + 1, start, title)
             target.font = HEADER_FONT
@@ -697,21 +717,24 @@ class _SheetWriter:
         for line in range(row, end + 1):
             rule = _rule(last_row=line == end, last_year=last_year)
             sheet.row_dimensions[line].height = BODY_HEIGHT
-            for column in range(1, self.below_last + 1):
+            for column in range(self.BELOW_START, self.below_last + 1):
                 sheet.cell(line, column).border = _frame(
-                    left=MEDIUM if column == 1 else DOTTED,
+                    left=MEDIUM if column == self.BELOW_START else DOTTED,
                     right=MEDIUM if column == self.below_last else DOTTED,
                     bottom=rule,
                 )
-        for line in range(row, end + 1):
-            sheet.cell(line, 1).fill = HEADER_FILL
-            sheet.cell(line, 2).fill = HEADER_FILL
 
-        label = sheet.cell(row, 1, f"{year}年")
+        first, last, _ = self.below_span(self.BELOW_SPANS[0])
+        for line in range(row, end + 1):
+            for column in range(first, last + 1):
+                sheet.cell(line, column).fill = HEADER_FILL
+
+        label = sheet.cell(row, first, f"{year}年")
         label.font = HEADER_FONT
         label.alignment = Alignment(horizontal="center", vertical="center",
                                     shrink_to_fit=True)
-        sheet.merge_cells(start_row=row, start_column=1, end_row=end, end_column=2)
+        sheet.merge_cells(start_row=row, start_column=first,
+                          end_row=end, end_column=last)
 
         at = row
         for group in groups:
@@ -720,7 +743,8 @@ class _SheetWriter:
 
     def _write_below_group(self, group: Group, start: int, end: int) -> None:
         sheet = self.sheet
-        for first, stop, key in self.BELOW_SPANS:
+        for span in self.BELOW_SPANS:
+            first, stop, key = self.below_span(span)
             if key == "year":
                 continue
             if key == "teacher":

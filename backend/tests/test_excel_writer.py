@@ -550,7 +550,11 @@ def test_the_junior_college_puts_the_intensive_list_below_the_grid(tmp_path):
                   intensive_codes=["J9"])["短大・前期"]
 
     band, year_column, name = intensive_block(sheet)
-    assert year_column == 1, "年次は左端から始まる"
+    # **A 列を 1 つあける。** 左端にぴったり寄せると、上の表の時限の列と
+    # 縦につながって見え、集中が時間割の続きのように読めてしまう。
+    assert year_column == 2
+    assert sheet.cell(band, 1).value is None
+    assert sheet.cell(band, 1).border.left.style is None, "A 列は枠の外"
     assert sheet.cell(band, name).value == "授業科目名"
 
     # 表の下にある。あいだが 1 行あいている。
@@ -561,7 +565,7 @@ def test_the_junior_college_puts_the_intensive_list_below_the_grid(tmp_path):
                    if sheet.cell(r, tuesday).border.left.style)
     heading = band - 1
     assert heading == grid_end + 2, "1 行あけて置く"
-    assert sheet.cell(heading, 1).value == "集中"
+    assert sheet.cell(heading, 2).value == "集中"
 
     row = find_row(sheet, name, "インターンシップ")
     assert row > band
@@ -577,3 +581,14 @@ def test_the_university_keeps_the_intensive_list_on_the_right(tmp_path):
     band, _, name = intensive_block(sheet)
     assert band == HEADER_ROW, "見出しは曜日と同じ行に並ぶ"
     assert name > column_of(sheet, "金", "授業科目名")
+
+
+def test_the_period_column_is_wide_enough_for_the_times(tmp_path):
+    """「10：30」が折り返さない幅を取る。
+
+    狭いと授業時間が途中で折れ、行高に隠れて読めなくなる。中央に寄せる
+    ので、短い「8：50」は自然に字下がりして上下がそろう。
+    """
+    sheet = write(tmp_path, [make("A1")], {"A1": (TimeSlot("月", 1),)})["経営・前期"]
+    assert sheet.column_dimensions["A"].width >= 10
+    assert sheet.column_dimensions["A"].width > sheet.column_dimensions["B"].width
