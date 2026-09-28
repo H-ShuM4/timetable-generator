@@ -1,5 +1,7 @@
 import tempfile
 import time
+from urllib.parse import quote
+
 
 from fastapi.testclient import TestClient
 
@@ -84,6 +86,42 @@ def test_export_returns_xlsx(monkeypatch):
     response = client.get(f"/api/export/{session_id}")
     assert response.status_code == 200
     assert response.content[:2] == b"PK"  # xlsx は zip 形式
+
+
+def test_export_uses_the_name_the_office_typed(monkeypatch):
+    """打った名前が、ブラウザが保存に使う名前になる。"""
+    session_id = _upload_small(monkeypatch)
+    client.post(f"/api/generate/{session_id}", json={"mode": "mock"})
+    _wait_for_completion(session_id)
+
+    response = client.get(f"/api/export/{session_id}", params={"name": "2026時間割"})
+    assert response.status_code == 200
+    # 非 ASCII は filename*=utf-8'' で百分率符号化されて載る
+    disposition = response.headers["content-disposition"]
+    assert quote("2026時間割.xlsx") in disposition
+
+
+def test_export_without_a_name_falls_back(monkeypatch):
+    session_id = _upload_small(monkeypatch)
+    client.post(f"/api/generate/{session_id}", json={"mode": "mock"})
+    _wait_for_completion(session_id)
+
+    response = client.get(f"/api/export/{session_id}")
+    assert quote("時間割.xlsx") in response.headers["content-disposition"]
+
+
+def test_a_name_cannot_break_the_header(monkeypatch):
+    """改行や引用符を混ぜても、ヘッダが 2 行に割れない。"""
+    session_id = _upload_small(monkeypatch)
+    client.post(f"/api/generate/{session_id}", json={"mode": "mock"})
+    _wait_for_completion(session_id)
+
+    response = client.get(f"/api/export/{session_id}",
+                          params={"name": '時間割"\r\nX-Injected: yes'})
+    assert response.status_code == 200
+    assert "x-injected" not in response.headers
+    disposition = response.headers["content-disposition"]
+    assert "\r" not in disposition and "\n" not in disposition
 
 
 def test_export_leaves_no_temporary_directory_behind(monkeypatch, tmp_path):

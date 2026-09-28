@@ -118,7 +118,14 @@
       <div class="result-toolbar">
         <div id="result-tabs"></div>
         <button id="undo-button" disabled>元に戻す</button>
-        <!-- 出力は Excel だけ。事務局の様式に合わせた xlsx をサーバが組む。 -->
+        <!-- 出力は Excel だけ。事務局の様式に合わせた xlsx をサーバが組む。
+             年度や学科をファイル名に入れて保管できるよう、名前は事務局が決める。 -->
+        <label class="export-name">
+          <span class="sr-only">ファイル名</span>
+          <input type="text" id="export-name" maxlength="80" autocomplete="off"
+                 placeholder="時間割">
+          <span class="export-suffix">.xlsx</span>
+        </label>
         <button id="export-button" class="primary">Excel で出力</button>
       </div>
       <div id="teacher-panel" hidden></div>

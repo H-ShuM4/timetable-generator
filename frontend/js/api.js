@@ -93,7 +93,9 @@ const api = {
   streamUrl(sessionId) {
     return `/api/generate/${sessionId}/stream`;
   },
-  exportUrl(sessionId) {
-    return `/api/export/${sessionId}`;
+  // 保存するファイル名は事務局が決める。整えるのはサーバ側
+  // （Windows が使えない文字を落とす）なので、ここでは素通しする。
+  exportUrl(sessionId, name) {
+    return `/api/export/${sessionId}?name=${encodeURIComponent(name || "")}`;
   },
 };

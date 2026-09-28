@@ -949,3 +949,29 @@ body.log-open { padding-bottom: calc(3.5rem + var(--log-height)); }
   outline-offset: 2px;
   border-radius: 3px;
 }
+
+/* ---------------------------------------------------------------- 出力 */
+
+/* 名前は事務局が決める。拡張子は変えられないので、入力欄の外に添える。 */
+.result-toolbar .export-name {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  flex: none;
+}
+#export-name {
+  width: 11rem;
+  font-size: 0.875rem;
+  padding: 0.375rem 0.5rem;
+}
+.export-suffix { font-size: 0.8125rem; color: var(--ink-soft); }
+
+/* 読み上げには要るが、目には要らない文言。 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

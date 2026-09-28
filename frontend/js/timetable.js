@@ -551,9 +551,35 @@ function initTimetable() {
     }
   });
   document.getElementById("export-button").addEventListener("click", exportResult);
+
+  // 毎年おなじ付け方をする事務局が、出力のたびに打ち直さずに済むようにする
+  // （重み付けのつまみと同じ扱い）。
+  const name = document.getElementById("export-name");
+  name.value = readExportName();
+  name.addEventListener("change", () => saveExportName(name.value));
+}
+
+const EXPORT_NAME_KEY = "timetable.exportName";
+
+function readExportName() {
+  try {
+    return window.localStorage.getItem(EXPORT_NAME_KEY) || "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function saveExportName(value) {
+  try {
+    window.localStorage.setItem(EXPORT_NAME_KEY, value);
+  } catch (error) {
+    // 覚えられなくても出力はできる
+  }
 }
 
 function exportResult() {
   if (!window.appState.sessionId) return;
-  window.location.href = api.exportUrl(window.appState.sessionId);
+  // 空のままなら、サーバが既定の「時間割」を使う。
+  const name = document.getElementById("export-name").value.trim();
+  window.location.href = api.exportUrl(window.appState.sessionId, name);
 }

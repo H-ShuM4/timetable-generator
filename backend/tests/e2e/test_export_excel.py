@@ -54,3 +54,47 @@ def test_the_toolbar_offers_nothing_to_choose(page: Page, live_server, sample_xl
     expect(page.locator("#export-button")).to_have_text("Excel で出力")
     assert page.locator("#export-format").count() == 0
     assert page.locator("#print-sheets").count() == 0
+
+
+def test_the_office_can_name_the_file(page: Page, live_server, sample_xlsx):
+    """打った名前でファイルが届く。
+
+    名前は URL に載ってサーバへ渡り、Content-Disposition として返る。
+    その往復は DOM スタブでは通せない。
+    """
+    generate_in_mock_mode(page, live_server, sample_xlsx)
+
+    page.locator("#export-name").fill("2026時間割（新経営学科）")
+    with page.expect_download() as download:
+        page.locator("#export-button").click()
+    assert download.value.suggested_filename == "2026時間割（新経営学科）.xlsx"
+
+
+def test_the_name_is_remembered_for_next_time(page: Page, live_server, sample_xlsx):
+    """毎年おなじ付け方をする事務局が、出力のたびに打ち直さずに済む。"""
+    generate_in_mock_mode(page, live_server, sample_xlsx)
+
+    field = page.locator("#export-name")
+    field.fill("2026時間割")
+    field.blur()
+
+    page.reload()
+    page.locator('#tabs button[data-view="result"]').click()
+    expect(page.locator("#export-name")).to_have_value("2026時間割")
+
+    # あとのテストが引きずらないように戻す
+    page.locator("#export-name").fill("")
+    page.locator("#export-name").blur()
+
+
+def test_a_name_windows_cannot_save_is_cleaned_up(page: Page, live_server, sample_xlsx):
+    """使えない文字を打っても、出力の直前で弾かれたりしない。
+
+    生成し直しになりかねないので、拒まずに整えて通す。
+    """
+    generate_in_mock_mode(page, live_server, sample_xlsx)
+
+    page.locator("#export-name").fill('時間割:2026?')
+    with page.expect_download() as download:
+        page.locator("#export-button").click()
+    assert download.value.suggested_filename == "時間割2026.xlsx"
