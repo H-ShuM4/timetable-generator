@@ -55,16 +55,28 @@ def column_of(sheet, day: str, title: str) -> int:
     raise AssertionError(f"{day}曜日に「{title}」の列が無い")
 
 
-def intensive_block(sheet) -> tuple[int, int]:
-    """集中の欄の（年次列, 授業科目名列）を返す。
+def intensive_block(sheet) -> tuple[int, int, int]:
+    """集中の欄の（見出し行, 年次列, 授業科目名列）を返す。
 
-    見本と同じく、年次の列には見出しを置かない（AG2:AG3 が空欄で、
-    「集中」は 1 つ右の AH2 から始まる）。見出しの位置から 1 つ左が年次列。
+    置き場所が学科で違う。大学は表の右、短大は表の下。どちらも「集中」の
+    帯があり、その次の行に列の見出しが並ぶ。
+
+    **「授業科目名」は曜日ごとに 5 つある。** 帯より左を拾わないよう、
+    見出しの列から右だけを探す。
     """
-    heading = next(c.column for c in sheet[2] if c.value == "集中")
-    name = next(column for column in range(heading, heading + 6)
-                if sheet.cell(HEADER_ROW, column).value == "授業科目名")
-    return heading - 1, name
+    for row in range(1, sheet.max_row + 1):
+        for cell in sheet[row]:
+            if cell.value != "集中":
+                continue
+            below = sheet[row + 1]
+            start = cell.column - 1
+            def column_for(title):
+                return next((c.column for c in below
+                             if c.column >= start and c.value == title), None)
+            name = column_for("授業科目名")
+            assert name, "集中の帯の下に「授業科目名」が無い"
+            return row + 1, column_for("年次") or cell.column - 1, name
+    raise AssertionError("集中の欄が無い")
 
 
 def find_row(sheet, column: int, value: str) -> int:
@@ -101,7 +113,8 @@ def test_the_days_run_across_and_friday_is_marked_remote(tmp_path):
 
 def test_periods_and_years_run_down_the_left(tmp_path):
     sheet = write(tmp_path, [make("A1")], {"A1": (TimeSlot("月", 1),)})["経営・前期"]
-    periods = [c.value for c in sheet["A"] if c.value and "時限" in str(c.value)]
+    periods = [str(c.value).split("\n")[0] for c in sheet["A"]
+               if c.value and "時限" in str(c.value)]
     assert periods == ["1時限", "2時限", "3時限", "4時限", "5時限"]
     years = [c.value for c in sheet["B"] if c.value]
     assert years[:4] == ["1年", "2年", "3年", "4年"], "大学は 4 年まで"
@@ -121,10 +134,19 @@ def test_a_subject_lands_in_its_day_period_and_year(tmp_path):
 
     row = find_row(sheet, column_of(sheet, "水", "授業科目名"), "経営学入門")
     assert sheet.cell(row, column_of(sheet, "水", "教員")).value == "築雅之"
-    assert sheet.cell(row, 1).value == "3時限" or sheet.cell(row, 1).value is None
     # 時限と年次は縦結合されるので、見出しは各ブロックの先頭行にだけ入る
-    assert _merged_label(sheet, row, 1) == "3時限"
+    assert period_at(sheet, row) == "3時限"
     assert _merged_label(sheet, row, 2) == "3年"
+
+
+def period_at(sheet, row: int) -> str:
+    """その行がどの時限かを返す。
+
+    時限の欄は「3時限／13：10／〜／14：50」と 2 段になっているので、
+    先頭の 1 行だけを見る。
+    """
+    label = _merged_label(sheet, row, 1)
+    return str(label).split("\n")[0] if label else ""
 
 
 def _merged_label(sheet, row: int, column: int) -> str:
@@ -145,8 +167,8 @@ def test_a_double_slot_subject_appears_in_both_periods(tmp_path):
     rows = [r for r in range(FIRST_BODY_ROW, sheet.max_row + 1)
             if sheet.cell(r, column).value == "動画制作"]
     assert len(rows) == 2, "▲科目は 2 コマとも出る"
-    assert _merged_label(sheet, rows[0], 1) == "2時限"
-    assert _merged_label(sheet, rows[1], 1) == "3時限"
+    assert period_at(sheet, rows[0]) == "2時限"
+    assert period_at(sheet, rows[1]) == "3時限"
 
 
 def test_a_fall_subject_stays_off_the_spring_sheet(tmp_path):
@@ -285,7 +307,7 @@ def test_intensive_subjects_sit_in_the_intensive_column(tmp_path):
                  department=Department.ACCOUNTING)
     sheet = write(tmp_path, [mine, other], {}, intensive_codes=["A9", "B9"])["経営・前期"]
 
-    year_column, name = intensive_block(sheet)
+    _, year_column, name = intensive_block(sheet)
     shown = [sheet.cell(r, name).value for r in range(FIRST_BODY_ROW, sheet.max_row + 1)]
     assert "認定ＰＢＬ" in shown
     assert "よその学科の集中" not in shown
@@ -304,7 +326,7 @@ def test_a_full_year_intensive_shows_on_both_terms(tmp_path):
 
     for name in ("短大・前期", "短大・後期"):
         sheet = book[name]
-        _, column = intensive_block(sheet)
+        _, _, column = intensive_block(sheet)
         find_row(sheet, column, "模擬ブライダルプロジェクト")
 
 
@@ -390,7 +412,7 @@ def test_the_last_period_is_closed_off(tmp_path):
     last = max(r for r in range(FIRST_BODY_ROW, sheet.max_row + 1)
                if sheet.cell(r, 2).value or _bottom(sheet, r, 2))
     assert _bottom(sheet, last, column_of(sheet, "月", "教員")) == "medium"
-    assert _merged_label(sheet, last, 1) == "5時限"
+    assert period_at(sheet, last) == "5時限"
 
 
 # ---------------------------------------------------------------- 集中の終わり
@@ -406,7 +428,7 @@ def test_the_intensive_column_stops_where_the_subjects_run_out(tmp_path):
     sheet = write(tmp_path, [grid, intensive], {"A1": (TimeSlot("月", 1),)},
                   intensive_codes=["A9"])["経営・前期"]
 
-    year_column, name = intensive_block(sheet)
+    _, year_column, name = intensive_block(sheet)
     row = find_row(sheet, name, "認定ＰＢＬ")
     assert _bottom(sheet, row, name) == "medium", "最後の科目の下は太い実線"
 
@@ -438,3 +460,120 @@ def test_a_one_line_name_shrinks_instead_of_wrapping(tmp_path):
 
     merged = sheet.cell(find_row(sheet, name, "課題研究Ⅰ"), name)
     assert merged.alignment.wrap_text is True, "結合したセルは折り返してよい"
+
+
+# ---------------------------------------------------------------- 今回の指示
+
+def test_the_sheet_opens_at_forty_percent(tmp_path):
+    """A3 横 1 枚ぶんの幅があり、100% では右端が画面に入らない。
+
+    事務局が開くたびに縮めなくて済むよう、倍率を決めておく。
+    """
+    book = write(tmp_path, [make("A1")], {"A1": (TimeSlot("月", 1),)})
+    for name in book.sheetnames:
+        assert book[name].sheet_view.zoomScale == 40, name
+
+
+def test_each_period_shows_when_the_class_runs(tmp_path):
+    """時限の欄に授業時間を 2 段で出す。"""
+    sheet = write(tmp_path, [make("A1")], {"A1": (TimeSlot("月", 1),)})["経営・前期"]
+    labels = [str(c.value) for c in sheet["A"] if c.value and "時限" in str(c.value)]
+
+    assert labels[0].startswith("1時限")
+    assert "8：50" in labels[0] and "10：30" in labels[0]
+    assert labels[4].startswith("5時限")
+    assert "16：50" in labels[4] and "18：30" in labels[4]
+    # 折り返さないと 2 段目が行の下に隠れる
+    first = next(c for c in sheet["A"] if c.value and "1時限" in str(c.value))
+    assert first.alignment.wrap_text is True
+
+
+def test_a_thin_period_is_still_tall_enough_for_its_times(tmp_path):
+    """科目が 1 件も無い時限でも、授業時間が隠れない高さを取る。
+
+    「1時限／8：50／〜／10：30」で 5 行ぶん要る。短大は年次が 2 つしか
+    無いので、そのままだと 2 行にしかならない。
+    """
+    sheet = write(tmp_path, [make("J1", department=Department.JUNIOR)],
+                  {"J1": (TimeSlot("月", 1),)})["短大・前期"]
+    starts = [c.row for c in sheet["A"] if c.value and "時限" in str(c.value)]
+    assert starts[1] - starts[0] >= 5, "1 時限ぶんの高さが足りない"
+
+
+def test_the_shading_alternates_like_a_checkerboard(tmp_path):
+    """曜日と時限を足して偶数のところに網掛けを敷く。
+
+    横に 5 曜日ぶん並ぶので、目が 1 行ずれると別の曜日を読んでしまう。
+    市松にすることで、どの升目がどこかを追いやすくする。
+    """
+    sheet = write(tmp_path, [make("A1")], {"A1": (TimeSlot("月", 1),)})["経営・前期"]
+
+    shaded = {}
+    for row in range(FIRST_BODY_ROW, sheet.max_row + 1):
+        label = _merged_label(sheet, row, 1)
+        if not label or "時限" not in str(label):
+            continue
+        period = str(label).split("\n")[0]
+        shaded[period] = [
+            day for day in "月火水木金"
+            if sheet.cell(row, column_of(sheet, day, "授業科目名")).fill.patternType
+        ]
+
+    assert shaded == {
+        "1時限": ["火", "木"],
+        "2時限": ["月", "水", "金"],
+        "3時限": ["火", "木"],
+        "4時限": ["月", "水", "金"],
+        "5時限": ["火", "木"],
+    }
+
+
+def test_the_junior_college_friday_takes_both_kinds(tmp_path):
+    """短大の遠隔列は ○ か空欄で × が無いため、対面も金曜に来る。"""
+    book = write(tmp_path, [make("A1")], {"A1": (TimeSlot("月", 1),)})
+    fridays = {name: next(str(c.value) for c in book[name][2]
+                          if c.value and str(c.value).startswith("金"))
+               for name in book.sheetnames}
+    assert fridays["経営・前期"] == "金曜日：遠隔"
+    assert fridays["短大・前期"] == "金曜日：対面＆遠隔"
+
+
+def test_the_junior_college_puts_the_intensive_list_below_the_grid(tmp_path):
+    """短大は曜日ブロックが 7 列あり、右へ集中を継ぎ足すと横長になりすぎる。
+
+    表の下へ 1 行あけて回し、左端から並べる。
+    """
+    grid = make("J1", name="ふつうの科目", department=Department.JUNIOR)
+    intensive = make("J9", name="インターンシップ", department=Department.JUNIOR,
+                     is_intensive=True, year=1, category=Category.REQUIRED)
+    sheet = write(tmp_path, [grid, intensive], {"J1": (TimeSlot("月", 1),)},
+                  intensive_codes=["J9"])["短大・前期"]
+
+    band, year_column, name = intensive_block(sheet)
+    assert year_column == 1, "年次は左端から始まる"
+    assert sheet.cell(band, name).value == "授業科目名"
+
+    # 表の下にある。あいだが 1 行あいている。
+    # **火曜の列で測る。** 集中の欄は A〜I しか使わないので、そこより右の
+    # 曜日ブロックを見れば、grid がどこで終わったかが分かる。
+    tuesday = column_of(sheet, "火", "授業科目名")
+    grid_end = max(r for r in range(FIRST_BODY_ROW, band)
+                   if sheet.cell(r, tuesday).border.left.style)
+    heading = band - 1
+    assert heading == grid_end + 2, "1 行あけて置く"
+    assert sheet.cell(heading, 1).value == "集中"
+
+    row = find_row(sheet, name, "インターンシップ")
+    assert row > band
+    assert _bottom(sheet, row, name) == "medium", "最後の科目の下は太い実線"
+    # 表の幅いっぱいまで枠を伸ばさない
+    assert sheet.cell(row, 12).border.left.style is None
+
+
+def test_the_university_keeps_the_intensive_list_on_the_right(tmp_path):
+    """大学は曜日ブロックが 6 列で右に余地がある。これまでどおり右へ置く。"""
+    sheet = write(tmp_path, [make("A9", name="認定ＰＢＬ", is_intensive=True)],
+                  {}, intensive_codes=["A9"])["経営・前期"]
+    band, _, name = intensive_block(sheet)
+    assert band == HEADER_ROW, "見出しは曜日と同じ行に並ぶ"
+    assert name > column_of(sheet, "金", "授業科目名")
