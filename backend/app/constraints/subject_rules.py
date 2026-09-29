@@ -8,32 +8,52 @@ from app.models.timetable import Timetable
 FRIDAY = "金"
 
 
+def _partners_elsewhere(context: Context, timetable: Timetable, subject: Subject,
+                        slots: tuple[TimeSlot, ...], group: str,
+                        rule_id: str, describe) -> list[Violation]:
+    """同じまとまりの科目が、別のコマに置かれていないか調べる。
+
+    H4（合同科目）と H12（前期・後期の対応科目）は、見るフィールドと
+    文言が違うだけで判定は同じ。**同じ判定を 2 通り書くと、片方だけ
+    直したときに気づけない。**
+
+    `group` は突き合わせに使う属性名（"joint_id" か "pair_id"）、
+    `describe` は相手の科目と置かれているコマから文言を作る関数。
+    まだ置かれていない相手は見ない（置く順に依らないようにするため）。
+    """
+    mine = getattr(subject, group)
+    candidate = set(slots)
+    violations: list[Violation] = []
+    for code, other in context.subjects.items():
+        if code == subject.code or getattr(other, group) != mine:
+            continue
+        placed = timetable.slot_of(code)
+        if not placed or set(placed) == candidate:
+            continue
+        violations.append(Violation(
+            rule_id=rule_id,
+            subject_code=subject.code,
+            message=describe(other, placed),
+            related_code=code,
+        ))
+    return violations
+
+
+def _where(placed) -> str:
+    return "・".join(str(s) for s in placed)
+
+
 def check_h4(
     context: Context, timetable: Timetable, subject: Subject, slots: tuple[TimeSlot, ...]
 ) -> list[Violation]:
     """合同科目のペアは同曜日・同時限。"""
     if not subject.joint_id:
         return []
-
-    candidate = set(slots)
-    violations: list[Violation] = []
-    for code, other in context.subjects.items():
-        if code == subject.code or other.joint_id != subject.joint_id:
-            continue
-        placed = timetable.slot_of(code)
-        if not placed:
-            continue
-        if set(placed) != candidate:
-            violations.append(Violation(
-                rule_id="H4",
-                subject_code=subject.code,
-                message=(
-                    f"合同科目 {other.name} は "
-                    f"{'・'.join(str(s) for s in placed)} に配置されています"
-                ),
-                related_code=code,
-            ))
-    return violations
+    return _partners_elsewhere(
+        context, timetable, subject, slots, "joint_id", "H4",
+        lambda other, placed:
+            f"合同科目 {other.name} は {_where(placed)} に配置されています",
+    )
 
 
 def check_h8(
@@ -144,26 +164,12 @@ def check_h12(
     """
     if not subject.pair_id:
         return []
-
-    candidate = set(slots)
-    violations: list[Violation] = []
-    for code, other in context.subjects.items():
-        if code == subject.code or other.pair_id != subject.pair_id:
-            continue
-        placed = timetable.slot_of(code)
-        if not placed:
-            continue
-        if set(placed) != candidate:
-            violations.append(Violation(
-                rule_id="H12",
-                subject_code=subject.code,
-                message=(
-                    f"対応科目 {other.name}（{other.term.value}）は "
-                    f"{'・'.join(str(s) for s in placed)} に配置されています"
-                ),
-                related_code=code,
-            ))
-    return violations
+    return _partners_elsewhere(
+        context, timetable, subject, slots, "pair_id", "H12",
+        lambda other, placed:
+            f"対応科目 {other.name}（{other.term.value}）は "
+            f"{_where(placed)} に配置されています",
+    )
 
 
 def morning_study_yields_to_availability(context: Context, subject: Subject) -> bool:

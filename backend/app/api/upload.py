@@ -83,13 +83,7 @@ async def upload(
             read=lambda role, action: _read_or_400(FILE_LABELS[role], action),
         )
 
-        data = SessionData(
-            subjects=loaded.subjects,
-            teachers=loaded.teachers,
-            warnings=loaded.warnings,
-            previous_entries=loaded.previous_entries,
-            previous_teachers=loaded.previous_teachers,
-        )
+        data = SessionData.from_loaded(loaded)
         session_id = store.create(data, saved)
     finally:
         logger.close()

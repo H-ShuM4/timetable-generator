@@ -60,6 +60,22 @@ class SessionData:
     cancel_event: threading.Event | None = None
     """生成中だけ立つ。中止要求はこれを set して伝える。"""
 
+    @classmethod
+    def from_loaded(cls, loaded) -> "SessionData":
+        """Excel から読み取った内容（LoadedData）をセッションに載せる。
+
+        **詰め替えはここ 1 か所だけにする。** アップロードのときと復元の
+        ときで同じ変換をするので、2 箇所に書くと読み取る項目が増えたときに
+        片方だけ直し忘れる。
+        """
+        return cls(
+            subjects=loaded.subjects,
+            teachers=loaded.teachers,
+            warnings=loaded.warnings,
+            previous_entries=loaded.previous_entries,
+            previous_teachers=loaded.previous_teachers,
+        )
+
     @property
     def context(self) -> Context:
         return Context.from_lists(self.subjects, self.teachers)
@@ -162,13 +178,7 @@ class SessionStore:
             previous_curriculum=optional("previous_curriculum"),
             previous_teachers=optional("previous_teachers"),
         )
-        return SessionData(
-            subjects=loaded.subjects,
-            teachers=loaded.teachers,
-            warnings=loaded.warnings,
-            previous_entries=loaded.previous_entries,
-            previous_teachers=loaded.previous_teachers,
-        )
+        return SessionData.from_loaded(loaded)
 
     def _apply_saved_result(self, directory: Path, data: SessionData) -> None:
         path = directory / "result.json"

@@ -107,15 +107,20 @@ def _parse_courses(value) -> list[str]:
     return [token.strip() for token in str(value).replace("、", ",").split(",") if token.strip()]
 
 
-def read_curriculum_rows(path: str | Path) -> list[dict]:
-    """全シートの行を、列見出しをキーにした dict のリストとしてそのまま返す。
+def _walk_rows(path: str | Path):
+    """カリキュラム一覧の全シートを、データ行だけ順に返す。
 
-    Subject に変換すると曜日・時限が片方だけ入力されている行の情報は
-    失われる（`fixed_slot` は両方揃った場合のみ作られる）ため、
-    `validators.check_partial_slots` はこの生の行データを直接見る。
+    返すのは (行のタプル, 列見出し→位置, 授業コード)。
+
+    **読み手が 2 つあるので、歩き方はここ 1 か所に置く。** 1 つは行を
+    そのまま返す `read_curriculum_rows`（曜日・時限が片方だけ入力された
+    行を検分するため、Subject に変換する前の姿が要る）、もう 1 つは
+    Subject に組み立てる `read_curriculum`。
+
+    大学と短大で別のシートに分かれており、シートは増えることがある。
+    授業コードの無い行（空行や注記）は読み飛ばす。
     """
     workbook = openpyxl.load_workbook(path, data_only=True)
-    rows_out: list[dict] = []
     for sheet in workbook.worksheets:
         rows = list(sheet.iter_rows(values_only=True))
         if not rows:
@@ -123,10 +128,19 @@ def read_curriculum_rows(path: str | Path) -> list[dict]:
         columns = _header_index(rows[0])
         for row in rows[1:]:
             code = _cell(row, columns, "授業コード")
-            if not code:
-                continue
-            rows_out.append({name: _cell(row, columns, name) for name in columns})
-    return rows_out
+            if code:
+                yield row, columns, str(code).strip()
+
+
+def read_curriculum_rows(path: str | Path) -> list[dict]:
+    """全シートの行を、列見出しをキーにした dict のリストとしてそのまま返す。
+
+    Subject に変換すると曜日・時限が片方だけ入力されている行の情報は
+    失われる（`fixed_slot` は両方揃った場合のみ作られる）ため、
+    `validators.check_partial_slots` はこの生の行データを直接見る。
+    """
+    return [{name: _cell(row, columns, name) for name in columns}
+            for row, columns, _ in _walk_rows(path)]
 
 
 def _fixed_slot(from_excel, department, year, base_name, slots_required):
@@ -153,23 +167,13 @@ def read_curriculum(path: str | Path) -> list[Subject]:
     overrides = _load_json("subject_overrides.json", {})
     non_consecutive = set(overrides.get("non_consecutive_double_subjects", []))
 
-    workbook = openpyxl.load_workbook(path, data_only=True)
+    # ▲科目は 2 行で 1 件。授業コードでまとめ、出てきた順を覚えておく。
     grouped: dict[str, list[tuple[tuple, dict[str, int]]]] = defaultdict(list)
     order: list[str] = []
-
-    for sheet in workbook.worksheets:
-        rows = list(sheet.iter_rows(values_only=True))
-        if not rows:
-            continue
-        columns = _header_index(rows[0])
-        for row in rows[1:]:
-            code = _cell(row, columns, "授業コード")
-            if not code:
-                continue
-            code = str(code).strip()
-            if code not in grouped:
-                order.append(code)
-            grouped[code].append((row, columns))
+    for row, columns, code in _walk_rows(path):
+        if code not in grouped:
+            order.append(code)
+        grouped[code].append((row, columns))
 
     subjects: list[Subject] = []
     for code in order:

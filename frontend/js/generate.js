@@ -31,27 +31,37 @@ function missingPreviousFiles() {
   return PREVIOUS_FILES.filter((file) => !summary[file.key]).map((file) => file.label);
 }
 
-function updateInheritAvailability() {
-  const radio = document.querySelector('input[name="mode"][value="inherit"]');
-  const note = document.getElementById("inherit-note");
-  const missing = missingPreviousFiles();
+/**
+ * モードを選べるかどうかを画面に反映する。
+ *
+ * **選べないときは、選べない理由をその場に出す。** 黙って選ばせると
+ * サーバがモックへ落とすので、走り終わってから「AI で作ったつもりだった」
+ * と気づくことになる。理由が出ていれば、事務局は何を足せばよいか分かる。
+ *
+ * 押せないモードが選ばれたままにもしない。選択だけ残っていると、
+ * 「生成を開始」がそのモードで走ると思ったまま押せてしまう。
+ *
+ * 文言は textContent で入れる（こちらが決めた固定文字列なので、
+ * エスケープは要らない）。
+ */
+function setModeAvailability(mode, noteId, ready, reason) {
+  const radio = document.querySelector(`input[name="mode"][value="${mode}"]`);
+  const note = document.getElementById(noteId);
 
-  radio.disabled = missing.length > 0;
-  if (!missing.length) {
-    note.hidden = true;
-    note.textContent = "";
-    return;
-  }
-  // textContent なのでエスケープは要らない（文言はこちらが決めた固定文字列）
-  note.hidden = false;
-  note.textContent =
-    "踏襲モード　前年度の「時間割」と「教員一覧」の 2 つのファイルが必要です。"
-    + "「1 ファイル読込」から、2 つとも読み込んでください。"
-    + "※片方だけでは前年度の内容を引き継げません。";
-  // 押せないモードが選ばれたままにしない
-  if (radio.checked) {
+  radio.disabled = !ready;
+  note.hidden = ready;
+  note.textContent = ready ? "" : reason;
+  if (!ready && radio.checked) {
     document.querySelector('input[name="mode"][value="mock"]').checked = true;
   }
+}
+
+function updateInheritAvailability() {
+  const missing = missingPreviousFiles();
+  setModeAvailability("inherit", "inherit-note", missing.length === 0,
+    "踏襲モード　前年度の「時間割」と「教員一覧」の 2 つのファイルが必要です。"
+    + "「1 ファイル読込」から、2 つとも読み込んでください。"
+    + "※片方だけでは前年度の内容を引き継げません。");
 }
 
 function retargetSummary() {
@@ -121,28 +131,16 @@ function renderRetargetList() {
 // AI モードは API キーが要る。キーが無いまま選ぶと、サーバは黙ってモックへ
 // 落とす。走り終わってから「AI で作ったつもりだった」と気づくのは遅すぎる。
 function updateAiAvailability(settings) {
-  const radio = document.querySelector('input[name="mode"][value="optimize"]');
-  const note = document.getElementById("ai-note");
   const ready = Boolean(settings && settings.has_api_key);
+  setModeAvailability("optimize", "ai-note", ready,
+    "AI モード　Gemini の API キーが必要です。"
+    + "画面右上の「設定」から登録してください。");
 
-  radio.disabled = !ready;
-  // 組み替えを AI に任せる選択肢も、キーが無ければ押せない。
+  // 踏襲モードで組み替えを AI に任せる選択肢も、キーが無ければ押せない。
   const method = document.getElementById("retarget-method");
   if (method) {
     method.disabled = !ready;
     if (!ready) method.value = "solver";
-  }
-  if (ready) {
-    note.hidden = true;
-    note.textContent = "";
-    return;
-  }
-  note.hidden = false;
-  note.textContent =
-    "AI モード　Gemini の API キーが必要です。"
-    + "画面右上の「設定」から登録してください。";
-  if (radio.checked) {
-    document.querySelector('input[name="mode"][value="mock"]').checked = true;
   }
 }
 
