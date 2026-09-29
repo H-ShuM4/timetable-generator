@@ -141,6 +141,12 @@ PERIOD_COLUMN_WIDTH = 10.5
 
 INTENSIVE_HEADING = "集中"
 
+SPANNING_KEYS = frozenset({"name", "quarter", "required_only", "category"})
+"""1 科目につき 1 回だけ書き、教員の人数ぶん縦に結合する項目。
+
+教員だけは 1 行に 1 名ずつ並べる。抽選・人数・教室は空欄のまま残す。
+"""
+
 
 def day_columns(department: Department, day: str) -> tuple[Column, ...]:
     if department is Department.JUNIOR:
@@ -153,6 +159,29 @@ def day_columns(department: Department, day: str) -> tuple[Column, ...]:
 def intensive_columns(department: Department) -> tuple[Column, ...]:
     tail = CATEGORY if department is Department.JUNIOR else REQUIRED_ONLY
     return (NAME, TEACHER, ROOM, tail)
+
+
+@dataclass(frozen=True)
+class Span:
+    """ブロックの中の 1 項目が、どの列からどの列までを占めるか。
+
+    **曜日ブロックと集中ブロックを同じ形で表すためのもの。** 曜日は
+    1 項目 1 列で済むが、集中を表の下へ回すときは既にある列幅を流用する
+    ため、科目名や教員を横に結合して広げる必要がある。両方を「列の範囲」
+    として持てば、書き込む側は 1 通りで済む。
+
+    以前はこの 2 つを別々の処理で書いており、片方を直してもう片方を
+    直し忘れる取りこぼしが実際に起きた（日付の置き場所がずれた）。
+    """
+
+    first: int
+    last: int
+    key: str
+    title: str = ""
+
+    @property
+    def merged(self) -> bool:
+        return self.last > self.first
 
 
 # ---------------------------------------------------------------- 体裁
@@ -361,15 +390,13 @@ class _SheetWriter:
                                      bottom=MEDIUM if row == HEADER_ROW else None)
 
         for day in DAYS:
-            start = self.day_start[day]
-            specs = day_columns(self.department, day)
-            self._band(start, len(specs), f"{day}曜日：{self._face(day)}", specs)
+            self._write_band(DAY_ROW, self._day_spans(day),
+                             f"{day}曜日：{self._face(day)}", year_inside=True)
 
         if not self.intensive_below:
-            self._band(self.intensive_start,
-                       len(intensive_columns(self.department)) + 1,
-                       INTENSIVE_HEADING, intensive_columns(self.department),
-                       lead_blank=True)
+            # 右に置く集中は、曜日と同じ帯に並べる
+            self._write_band(DAY_ROW, self._intensive_spans(),
+                             INTENSIVE_HEADING, year_inside=False)
 
     def _face(self, day: str) -> str:
         """その曜日が対面か遠隔か。
@@ -381,37 +408,11 @@ class _SheetWriter:
             return "対面"
         return "対面＆遠隔" if self.junior else "遠隔"
 
-    def _band(self, start: int, width: int, heading: str, specs, lead_blank=False) -> None:
-        """曜日（または集中）1 ブロック分の 2 行の見出しを書く。"""
-        sheet = self.sheet
-        end = start + width - 1
-        first = start + 1 if lead_blank else start
-        cell = sheet.cell(DAY_ROW, first, heading)
-        cell.font = DAY_FONT
-        cell.alignment = Alignment(horizontal="center", vertical="center", shrink_to_fit=True)
-        if end > first:
-            sheet.merge_cells(start_row=DAY_ROW, start_column=first,
-                              end_row=DAY_ROW, end_column=end)
-        if lead_blank:
-            sheet.merge_cells(start_row=DAY_ROW, start_column=start,
-                              end_row=HEADER_ROW, end_column=start)
-
-        for offset in range(width):
-            column = start + offset
-            for row in (DAY_ROW, HEADER_ROW):
-                target = sheet.cell(row, column)
-                target.fill = HEADER_FILL
-                target.border = _frame(
-                    left=MEDIUM if column == start else DOTTED,
-                    right=MEDIUM if column == end else DOTTED,
-                    top=MEDIUM, bottom=MEDIUM,
-                )
-        for offset, spec in enumerate(specs):
-            column = start + offset + (1 if lead_blank else 0)
-            target = sheet.cell(HEADER_ROW, column, spec.title or None)
-            target.font = HEADER_FONT
-            target.alignment = Alignment(horizontal="center", vertical="center",
-                                         shrink_to_fit=True)
+    def _day_spans(self, day: str) -> list[Span]:
+        """曜日ブロックの列取り。1 項目 1 列で足りる。"""
+        start = self.day_start[day]
+        return [Span(start + offset, start + offset, spec.key, spec.title)
+                for offset, spec in enumerate(day_columns(self.department, day))]
 
     # -- 本体 ---------------------------------------------------------
 
@@ -474,67 +475,70 @@ class _SheetWriter:
 
     def _write_day(self, day: str, period: int, start: int, end: int,
                    groups: list[Group], last_year: bool) -> None:
-        specs = day_columns(self.department, day)
-        column_of = {spec.key: self.day_start[day] + i for i, spec in enumerate(specs)}
-        block_start = self.day_start[day]
-        block_end = block_start + len(specs) - 1
-        shade = PatternFill("solid", fgColor=SHADED) if is_shaded(day, period) else None
-
-        for row in range(start, end + 1):
-            rule = _rule(last_row=row == end, last_year=last_year)
-            for column in range(block_start, block_end + 1):
-                cell = self.sheet.cell(row, column)
-                cell.border = _frame(
-                    left=MEDIUM if column == block_start else DOTTED,
-                    right=MEDIUM if column == block_end else DOTTED,
-                    bottom=rule,
-                )
-                if shade is not None:
-                    cell.fill = shade
-
+        spans = self._day_spans(day)
+        self._frame_rows(spans, start, end, last_year=last_year,
+                         shade=PatternFill("solid", fgColor=SHADED)
+                         if is_shaded(day, period) else None)
         row = start
         for group in groups:
-            self._write_group(group, row, column_of, specs)
+            self._write_group(group, row, spans)
             row += group.height
 
-    def _write_group(self, group: Group, start: int, column_of, specs) -> None:
-        sheet = self.sheet
+    def _write_group(self, group: Group, start: int, spans: list[Span]) -> None:
+        """同じ科目名のひとかたまりを書く。
+
+        科目名は 1 回だけ書いて教員の人数ぶん縦に結合し、教員はその行数
+        ぶん 1 行ずつ並べる。抽選・人数・教室は事務局があとから手で入れる
+        欄なので、枠だけ用意して空のままにする。
+        """
         end = start + group.height - 1
-        spanning = {"name", "quarter", "required_only", "category"}
 
-        for spec in specs:
-            column = column_of[spec.key]
-            if spec.key == "teacher":
-                for offset, teacher in enumerate(group.teachers):
-                    cell = sheet.cell(start + offset, column, teacher or None)
-                    cell.font = BODY_FONT
-                    cell.alignment = Alignment(horizontal="left", vertical="center",
-                                               shrink_to_fit=True)
-                continue
-            if spec.key not in spanning:
-                # 抽選・人数・教室は事務局があとから手で入れる欄。枠だけ用意する。
-                if spec.key == "room":
-                    sheet.cell(start, column).font = ROOM_FONT
-                continue
+        for span in spans:
+            if span.key == "teacher":
+                self._write_teachers(group, start, span)
+            elif span.key == "room":
+                # 空欄だが、事務局が教室番号を打ったときの大きさを決めておく
+                self.sheet.cell(start, span.first).font = ROOM_FONT
+                self._merge(start, start, span)
+            elif span.key in SPANNING_KEYS:
+                self._write_spanning(group, start, end, span)
 
-            value = self._value(spec.key, group)
-            cell = sheet.cell(start, column, value or None)
-            if spec.key == "name":
-                cell.font = BODY_FONT
-                # **折り返すのは縦に結合したときだけ。** Excel では wrap が
-                # shrink を打ち消す。1 行しかないセルで折り返すと、2 行目が
-                # 行高（23.5）に隠れて読めなくなる。見本も、複数行に結合した
-                # セルにだけ wrap を付けている。
-                cell.alignment = Alignment(horizontal="left", vertical="center",
-                                           wrap_text=group.height > 1,
-                                           shrink_to_fit=True)
-            else:
-                cell.font = SMALL_FONT
-                cell.alignment = Alignment(horizontal="center", vertical="center",
-                                           shrink_to_fit=True)
-            if end > start:
-                sheet.merge_cells(start_row=start, start_column=column,
-                                  end_row=end, end_column=column)
+    def _write_teachers(self, group: Group, start: int, span: Span) -> None:
+        for offset, teacher in enumerate(group.teachers):
+            row = start + offset
+            cell = self.sheet.cell(row, span.first, teacher or None)
+            cell.font = BODY_FONT
+            cell.alignment = Alignment(horizontal="left", vertical="center",
+                                       shrink_to_fit=True)
+            self._merge(row, row, span)
+
+    def _write_spanning(self, group: Group, start: int, end: int, span: Span) -> None:
+        """教員の人数ぶん縦に結合して 1 回だけ書く項目（科目名・開講期・区分）。"""
+        cell = self.sheet.cell(start, span.first, self._value(span.key, group) or None)
+        if span.key == "name":
+            cell.font = BODY_FONT
+            # **折り返すのは縦に結合したときだけ。** Excel では wrap が
+            # shrink を打ち消す。1 行しかないセルで折り返すと、2 行目が
+            # 行高（23.5）に隠れて読めなくなる。見本も、複数行に結合した
+            # セルにだけ wrap を付けている。
+            cell.alignment = Alignment(horizontal="left", vertical="center",
+                                       wrap_text=group.height > 1, shrink_to_fit=True)
+        else:
+            cell.font = SMALL_FONT
+            cell.alignment = Alignment(horizontal="center", vertical="center",
+                                       shrink_to_fit=True)
+        self._merge(start, end, span)
+
+    def _merge(self, start: int, end: int, span: Span) -> None:
+        """1 セルだけの結合は書かない。
+
+        openpyxl は止めずに <mergeCell ref="B2"/> を書き出すが、結合は
+        2 セル以上を束ねるものなので仕様から外れており、Excel が修復を
+        促すことがある。
+        """
+        if end > start or span.merged:
+            self.sheet.merge_cells(start_row=start, start_column=span.first,
+                                   end_row=end, end_column=span.last)
 
     def _value(self, key: str, group: Group) -> str:
         if key == "name":
@@ -547,6 +551,66 @@ class _SheetWriter:
         return "必" if group.category is Category.REQUIRED else ""
 
     # -- 集中講義 -----------------------------------------------------
+
+    BELOW_START = 2
+    """表の下へ回すとき、集中の欄が始まる列。
+
+    **A 列を 1 つあける。** 左端にぴったり寄せると、上の表の時限の列と
+    縦につながって見え、集中が時間割の続きのように読めてしまう。1 列
+    あけるだけで別の塊だと分かる。
+    """
+
+    BELOW_SPANS = ((0, 0, "year"), (1, 3, "name"), (4, 5, "teacher"),
+                   (6, 6, "room"), (7, 7, "tail"))
+    """表の下へ回すときの列の割り当て（BELOW_START からの位置, 同終わり, 中身）。
+
+    **短大の列幅に合わせてある。** 下へ回すのは短大だけなので、ほかの
+    学科の並びは考えていない。大学も下へ回すことになったら、ここを
+    学科ごとに分ける必要がある。
+
+    列幅は曜日ブロックのものをそのまま使い、足りないところは横に結合して
+    広げる。**広げるのは、結合しないと入らないものだけ。** 年次・教室・
+    必修は上の表で同じものが入っている列の幅で足りている。どれか 1 つ
+    だけ広いと、そこが間延びして見える。
+
+        B     年次       5.6
+        C:E   授業科目名 48.6（抽選・人数・科目名を結合）
+        F:G   教員       22.6（備考・教員を結合）
+        H     教室       10.6
+        I     必修        6.5
+    """
+
+    INTENSIVE_TITLES = {"year": "年次", "name": "授業科目名",
+                        "teacher": "教員", "room": "教室"}
+
+    def _intensive_spans(self) -> list[Span]:
+        """集中の欄の列取り。置き場所が学科で違う。
+
+        大学は曜日ブロックが 6 列で右に余地があるので、表の右へ置く。
+        短大は 7 列あり、右へ継ぎ足すと 1 枚に収まらないほど横長になる
+        ので表の下へ回す。**どちらも「列の範囲の並び」として同じ形で
+        表せるので、書き込む処理は 1 本で足りる。**
+        """
+        # 末尾の欄は学科で意味が違う。短大は必・選必を書き分け、大学は
+        # 見本どおり必修の「必」だけを出す。どちらを書くかは列の名前で
+        # 決まる（内訳は _value が持つ）ので、ここで本来の名前に直す。
+        tail = CATEGORY if self.junior else REQUIRED_ONLY
+        title = {**self.INTENSIVE_TITLES, tail.key: tail.title}
+        named = {**{k: k for k in title}, "tail": tail.key}
+
+        if self.intensive_below:
+            return [Span(self.BELOW_START + first, self.BELOW_START + last,
+                         named[key], title[named[key]])
+                    for first, last, key in self.BELOW_SPANS]
+
+        # 右に置くときは 1 項目 1 列。年次の欄には見出しを置かない
+        # （見本の AG2:AG3 が空欄で、「集中」は 1 つ右から始まる）。
+        column = self.intensive_start
+        spans = [Span(column, column, "year", "")]
+        for offset, spec in enumerate(intensive_columns(self.department), start=1):
+            spans.append(Span(column + offset, column + offset, spec.key,
+                              title[spec.key]))
+        return spans
 
     def _intensive(self) -> list:
         """このシートに出す集中講義。
@@ -563,228 +627,127 @@ class _SheetWriter:
                 found.append(subject)
         return found
 
-    def _write_intensive(self) -> int:
-        """集中の欄を組む。**科目が尽きたところで太い実線を引いて終わる。**
+    def _write_intensive(self, body_end: int) -> int:
+        """集中の欄を組み、最後に使った行を返す。
 
-        グリッド側は 5 時限 × 年次ぶんの高さが必ず要るが、集中はその学科・
-        学期にあるだけしか無い。下まで空の枠を伸ばすと、何も無い場所を
-        延々と目で追うことになる。
-        """
-        specs = intensive_columns(self.department)
-        year_column = self.intensive_start
-        first = year_column + 1
-        last = first + len(specs) - 1
-
-        by_year: dict[int, list] = {}
-        for subject in self._intensive():
-            by_year.setdefault(subject.year, []).append(subject)
-
-        years = sorted(by_year)
-        row = FIRST_BODY_ROW
-        for index, year in enumerate(years):
-            last_year = index == len(years) - 1
-            groups = _group(by_year[year])
-            end = row + sum(g.height for g in groups) - 1
-
-            label = self.sheet.cell(row, year_column, f"{year}年")
-            label.font = HEADER_FONT
-            label.alignment = Alignment(horizontal="center", vertical="center",
-                                        shrink_to_fit=True)
-            for line in range(row, end + 1):
-                rule = _rule(last_row=line == end, last_year=last_year)
-                cell = self.sheet.cell(line, year_column)
-                cell.fill = HEADER_FILL
-                cell.border = _frame(left=MEDIUM, right=DOTTED, bottom=rule)
-                for column in range(first, last + 1):
-                    self.sheet.cell(line, column).border = _frame(
-                        left=DOTTED, right=MEDIUM if column == last else DOTTED,
-                        bottom=rule,
-                    )
-                self.sheet.row_dimensions[line].height = BODY_HEIGHT
-            if end > row:
-                self.sheet.merge_cells(start_row=row, start_column=year_column,
-                                       end_row=end, end_column=year_column)
-
-            column_of = {spec.key: first + i for i, spec in enumerate(specs)}
-            at = row
-            for group in groups:
-                self._write_group(group, at, column_of, specs)
-                at += group.height
-            row = end + 1
-        return row - 1
-
-    # -- 集中講義（表の下に置く場合） --------------------------------
-
-    BELOW_START = 2
-    """下に置く集中の欄が始まる列。
-
-    **A 列を 1 つあける。** 左端にぴったり寄せると、上の表の時限の列と
-    縦につながって見え、集中が時間割の続きのように読めてしまう。1 列
-    あけるだけで別の塊だと分かる。
-    """
-
-    BELOW_SPANS = ((0, 0, "year"), (1, 3, "name"), (4, 5, "teacher"),
-                   (6, 6, "room"), (7, 7, "tail"))
-    """下に置くときの列の割り当て（BELOW_START からの位置, 同終わり, 中身）。
-
-    **短大の列幅に合わせてある。** 下へ回すのは短大だけなので、ほかの
-    学科の並びは考えていない。大学も下へ回すことになったら、ここを
-    学科ごとに分ける必要がある。
-
-    列幅は曜日ブロックのものをそのまま使い、足りないところは横に結合して
-    広げる。**年次・教室・必修は 1 列のまま。** 上の表で同じものが入って
-    いる列の幅をそのまま使う。「1年」も教室番号も「選必」も、その幅で
-    収まっているので広げる理由が無い。広げるのは、結合しないと入らない
-    科目名と教員だけにする。
-
-        B     年次       5.6
-        C:E   授業科目名 48.6（抽選・人数・科目名を結合）
-        F:G   教員       22.6（備考・教員を結合）
-        H     教室       10.6
-        I     必修        6.5
-    """
-
-    BELOW_TITLES = {"year": "年次", "name": "授業科目名", "teacher": "教員",
-                    "room": "教室"}
-
-    @property
-    def below_last(self) -> int:
-        """下に置いた集中の欄が使う右端の列。
-
-        表の幅いっぱいまで枠を伸ばさない。右側が空の升目で埋まると、
-        まだ続きがあるように見えてしまう。
-        """
-        return self.BELOW_START + self.BELOW_SPANS[-1][1]
-
-    def below_span(self, span) -> tuple[int, int, str]:
-        """BELOW_SPANS の 1 件を、実際の列番号に直す。"""
-        first, last, key = span
-        return self.BELOW_START + first, self.BELOW_START + last, key
-
-    def _write_intensive_below(self, body_end: int) -> int:
-        """表の下に 1 行あけて、左から 1 列おいて集中講義を並べる。
-
-        短大は曜日ブロックが 7 列あり、右へさらに集中を継ぎ足すと 1 枚に
-        収まらないほど横長になる。下へ回す。
+        **科目が尽きたところで太い実線を引いて終わる。** グリッド側は
+        5 時限 × 年次ぶんの高さが必ず要るが、集中はその学科・学期に
+        あるだけしか無い。下まで空の枠を伸ばすと、何も無い場所を延々と
+        目で追うことになる。
         """
         subjects = self._intensive()
-        if not subjects:
-            return body_end
+        spans = self._intensive_spans()
 
-        tail_title = "必修" if self.junior else "備考"
-        head = body_end + 2  # 1 行あける
-        self._write_below_heading(head, tail_title)
+        if self.intensive_below:
+            if not subjects:
+                return body_end
+            head = body_end + 2  # 表とのあいだを 1 行あける
+            self._write_band(head, spans, INTENSIVE_HEADING, year_inside=True)
+            row = head + 2
+        else:
+            row = FIRST_BODY_ROW  # 見出しは曜日と同じ帯に並べて済んでいる
 
         by_year: dict[int, list] = {}
         for subject in subjects:
             by_year.setdefault(subject.year, []).append(subject)
 
         years = sorted(by_year)
-        row = head + 2
         for index, year in enumerate(years):
-            last_year = index == len(years) - 1
             groups = _group(by_year[year])
             end = row + sum(g.height for g in groups) - 1
-            self._write_below_rows(row, end, year, groups, last_year)
+            self._write_year_rows(spans, row, end, year, groups,
+                                  last_year=index == len(years) - 1)
             row = end + 1
         return row - 1
 
-    def _write_below_heading(self, row: int, tail_title: str) -> None:
+    def _write_year_rows(self, spans: list[Span], start: int, end: int, year: int,
+                         groups: list[Group], last_year: bool) -> None:
+        """集中の 1 年次ぶん。年次の欄を縦に結合し、その右へ科目を並べる。"""
+        year_span = spans[0]
+        self._frame_rows(spans, start, end, last_year=last_year,
+                         filled={year_span.key})
+
+        label = self.sheet.cell(start, year_span.first, f"{year}年")
+        label.font = HEADER_FONT
+        label.alignment = Alignment(horizontal="center", vertical="center",
+                                    shrink_to_fit=True)
+        self._merge(start, end, year_span)
+
+        row = start
+        for group in groups:
+            self._write_group(group, row, spans[1:])
+            row += group.height
+
+    # -- 枠と見出し ---------------------------------------------------
+
+    def _frame_rows(self, spans: list[Span], start: int, end: int, *,
+                    last_year: bool, filled: set[str] = frozenset(),
+                    shade: PatternFill | None = None) -> None:
+        """ブロックの罫線と塗りを敷く。
+
+        左右の端は太い実線、内側は点線。下の線は _rule が決める
+        （時限のあいだは太い実線、年次のあいだは点線、年次の中は線なし）。
+        """
+        left, right = spans[0].first, spans[-1].last
+        for row in range(start, end + 1):
+            rule = _rule(last_row=row == end, last_year=last_year)
+            self.sheet.row_dimensions[row].height = BODY_HEIGHT
+            for span in spans:
+                for column in range(span.first, span.last + 1):
+                    cell = self.sheet.cell(row, column)
+                    cell.border = _frame(
+                        left=MEDIUM if column == left else DOTTED,
+                        right=MEDIUM if column == right else DOTTED,
+                        bottom=rule,
+                    )
+                    if span.key in filled:
+                        cell.fill = HEADER_FILL
+                    elif shade is not None:
+                        cell.fill = shade
+
+    def _write_band(self, row: int, spans: list[Span], heading: str, *,
+                    year_inside: bool) -> None:
+        """ブロックの 2 行の見出し（帯 ＋ 列名）を書く。
+
+        `year_inside` は年次の列を帯に含めるかどうか。表の下へ回した集中は
+        含めて「年次」と書くが、右に置くときは見本に合わせて空欄のまま
+        縦に結合する（見本の AG2:AG3）。
+        """
         sheet = self.sheet
         sheet.row_dimensions[row].height = DAY_HEIGHT
         sheet.row_dimensions[row + 1].height = BODY_HEIGHT
 
-        cell = sheet.cell(row, self.BELOW_START, INTENSIVE_HEADING)
+        titled = spans if year_inside else spans[1:]
+        left, right = spans[0].first, spans[-1].last
+
+        cell = sheet.cell(row, titled[0].first, heading)
         cell.font = DAY_FONT
         cell.alignment = Alignment(horizontal="center", vertical="center",
                                    shrink_to_fit=True)
-        sheet.merge_cells(start_row=row, start_column=self.BELOW_START,
-                          end_row=row, end_column=self.below_last)
-        for column in range(self.BELOW_START, self.below_last + 1):
+        if right > titled[0].first:
+            sheet.merge_cells(start_row=row, start_column=titled[0].first,
+                              end_row=row, end_column=right)
+        if not year_inside:
+            sheet.merge_cells(start_row=row, start_column=left,
+                              end_row=row + 1, end_column=left)
+
+        for column in range(left, right + 1):
             for line in (row, row + 1):
                 target = sheet.cell(line, column)
                 target.fill = HEADER_FILL
                 target.border = _frame(
-                    left=MEDIUM if column == self.BELOW_START else DOTTED,
-                    right=MEDIUM if column == self.below_last else DOTTED,
+                    left=MEDIUM if column == left else DOTTED,
+                    right=MEDIUM if column == right else DOTTED,
                     top=MEDIUM, bottom=MEDIUM,
                 )
-        for span in self.BELOW_SPANS:
-            start, stop, key = self.below_span(span)
-            title = self.BELOW_TITLES.get(key, tail_title)
-            target = sheet.cell(row + 1, start, title)
+        for span in titled:
+            target = sheet.cell(row + 1, span.first, span.title or None)
             target.font = HEADER_FONT
             target.alignment = Alignment(horizontal="center", vertical="center",
                                          shrink_to_fit=True)
-            if stop > start:
-                sheet.merge_cells(start_row=row + 1, start_column=start,
-                                  end_row=row + 1, end_column=stop)
-
-    def _write_below_rows(self, row: int, end: int, year: int, groups, last_year) -> None:
-        sheet = self.sheet
-        for line in range(row, end + 1):
-            rule = _rule(last_row=line == end, last_year=last_year)
-            sheet.row_dimensions[line].height = BODY_HEIGHT
-            for column in range(self.BELOW_START, self.below_last + 1):
-                sheet.cell(line, column).border = _frame(
-                    left=MEDIUM if column == self.BELOW_START else DOTTED,
-                    right=MEDIUM if column == self.below_last else DOTTED,
-                    bottom=rule,
-                )
-
-        first, last, _ = self.below_span(self.BELOW_SPANS[0])
-        for line in range(row, end + 1):
-            for column in range(first, last + 1):
-                sheet.cell(line, column).fill = HEADER_FILL
-
-        label = sheet.cell(row, first, f"{year}年")
-        label.font = HEADER_FONT
-        label.alignment = Alignment(horizontal="center", vertical="center",
-                                    shrink_to_fit=True)
-        if end > row or last > first:
-            sheet.merge_cells(start_row=row, start_column=first,
-                              end_row=end, end_column=last)
-
-        at = row
-        for group in groups:
-            self._write_below_group(group, at, at + group.height - 1)
-            at += group.height
-
-    def _write_below_group(self, group: Group, start: int, end: int) -> None:
-        sheet = self.sheet
-        for span in self.BELOW_SPANS:
-            first, stop, key = self.below_span(span)
-            if key == "year":
-                continue
-            if key == "teacher":
-                for offset, teacher in enumerate(group.teachers):
-                    cell = sheet.cell(start + offset, first, teacher or None)
-                    cell.font = BODY_FONT
-                    cell.alignment = Alignment(horizontal="left", vertical="center",
-                                               shrink_to_fit=True)
-                    if stop > first:
-                        sheet.merge_cells(start_row=start + offset, start_column=first,
-                                          end_row=start + offset, end_column=stop)
-                continue
-            if key == "room":
-                sheet.cell(start, first).font = ROOM_FONT
-                continue
-
-            value = group.name if key == "name" else self._value(
-                "category" if self.junior else "required_only", group)
-            cell = sheet.cell(start, first, value or None)
-            if key == "name":
-                cell.font = BODY_FONT
-                cell.alignment = Alignment(horizontal="left", vertical="center",
-                                           wrap_text=group.height > 1,
-                                           shrink_to_fit=True)
-            else:
-                cell.font = SMALL_FONT
-                cell.alignment = Alignment(horizontal="center", vertical="center",
-                                           shrink_to_fit=True)
-            if stop > first or end > start:
-                sheet.merge_cells(start_row=start, start_column=first,
-                                  end_row=end, end_column=stop)
+            if span.merged:
+                sheet.merge_cells(start_row=row + 1, start_column=span.first,
+                                  end_row=row + 1, end_column=span.last)
 
     def _set_up_printing(self, bottom: int) -> None:
         sheet = self.sheet
@@ -807,15 +770,13 @@ class _SheetWriter:
         sheet.page_margins.bottom = 0.1
 
     def write(self, timetable, intensive_codes) -> None:
+        """1 シート分を組む。見出し → 本体 → 集中 → 印刷設定 の順。"""
         self.timetable = timetable
         self.intensive_codes = list(intensive_codes)
         self._write_heading()
         body_end = self._write_body()
-        if self.intensive_below:
-            bottom = self._write_intensive_below(body_end)
-        else:
-            bottom = max(body_end, self._write_intensive())
-        self._set_up_printing(bottom)
+        intensive_end = self._write_intensive(body_end)
+        self._set_up_printing(max(body_end, intensive_end))
 
 
 def write_timetable_excel(context: Context, result, path: str | Path) -> Path:
