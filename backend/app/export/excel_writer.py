@@ -37,7 +37,8 @@ from app.export.sheet_layout import (
     BODY_FONT, BODY_HEIGHT, CATEGORY, CATEGORY_MARKS, DATE_FONT, DAY_FONT,
     DAY_HEIGHT, DAY_ROW, DEPARTMENT_TITLES, DEPARTMENT_YEARS, DOTTED,
     FIRST_BODY_ROW, HEADER_FILL, HEADER_FONT, HEADER_ROW, INTENSIVE_HEADING,
-    MEDIUM, PERIOD_COLUMN_WIDTH, PERIOD_TIMES, REMOTE_DAY, REQUIRED_ONLY,
+    MEDIUM, PERIOD_COLUMN_WIDTH, PERIOD_LABEL_GAP, PERIOD_TIMES, REMOTE_DAY,
+    REQUIRED_ONLY,
     ROOM_FONT, ROWS_FOR_PERIOD_LABEL, SHADED, SHEET_PLAN, SMALL_FONT,
     SPACER_WIDTH, SPANNING_KEYS, TITLE_FONT, TITLE_HEIGHT, TITLE_ROW, ZOOM,
     YEAR_COLUMN_WIDTH, Group, Span,
@@ -210,7 +211,9 @@ class _SheetWriter:
 
     def _write_period_label(self, start: int, end: int, period: int) -> None:
         opens, closes = PERIOD_TIMES[period]
-        cell = self.sheet.cell(start, 1, f"{period}時限\n\n{opens}\n〜\n{closes}")
+        gap = "\n" * (PERIOD_LABEL_GAP + 1)
+        cell = self.sheet.cell(start, 1,
+                               f"{period}時限{gap}{opens}\n〜\n{closes}")
         cell.font = HEADER_FONT
         # 折り返して 2 段で見せる。shrink は wrap に打ち消されるので付けない。
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)

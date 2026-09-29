@@ -13,6 +13,7 @@ import pytest
 
 from app.constraints.context import Context
 from app.export.excel_writer import SHEET_PLAN, write_timetable_excel
+from app.export.sheet_layout import PERIOD_LABEL_GAP, ROWS_FOR_PERIOD_LABEL
 from app.models.enums import Category, Department, Quarter, Term
 from tests.factories import subject as make
 from app.models.timeslot import TimeSlot
@@ -147,6 +148,14 @@ def period_at(sheet, row: int) -> str:
     """
     label = _merged_label(sheet, row, 1)
     return str(label).split("\n")[0] if label else ""
+
+
+def block_end(sheet, row: int, column: int) -> int:
+    """その行が属する縦結合の最終行。結合していなければその行のまま。"""
+    for rng in sheet.merged_cells.ranges:
+        if rng.min_col == column and rng.min_row <= row <= rng.max_row:
+            return rng.max_row
+    return row
 
 
 def _merged_label(sheet, row: int, column: int) -> str:
@@ -399,8 +408,11 @@ def test_the_rules_tell_periods_years_and_rows_apart(tmp_path):
     assert _bottom(sheet, first, teacher) is None, "同じ年次の中には線を引かない"
     assert _bottom(sheet, first + 1, teacher) == "dotted", "年次のあいだは点線"
 
-    # 1 時限の最後の年次（大学は 4 年）の下は太い実線になる
-    last_of_period = find_row(sheet, 2, "4年")
+    # 1 時限の最後の年次（大学は 4 年）の下は太い実線になる。
+    # **年次のブロックは縦に結合されることがある**（授業時間を隠さない
+    # 高さを確保するため、最後の年次に余りを足す）ので、ラベルの行ではなく
+    # ブロックの末尾を見る。
+    last_of_period = block_end(sheet, find_row(sheet, 2, "4年"), 2)
     assert _bottom(sheet, last_of_period, teacher) == "medium", "時限のあいだは太い実線"
     assert _bottom(sheet, last_of_period, 1) == "medium"
     assert _bottom(sheet, last_of_period, 2) == "medium"
@@ -491,13 +503,32 @@ def test_each_period_shows_when_the_class_runs(tmp_path):
 def test_a_thin_period_is_still_tall_enough_for_its_times(tmp_path):
     """科目が 1 件も無い時限でも、授業時間が隠れない高さを取る。
 
-    「1時限／8：50／〜／10：30」で 5 行ぶん要る。短大は年次が 2 つしか
-    無いので、そのままだと 2 行にしかならない。
+    短大は年次が 2 つしか無いので、そのままだと 2 行にしかならない。
+    足りないぶんは最後の年次に足して背を伸ばす。
     """
     sheet = write(tmp_path, [make("J1", department=Department.JUNIOR)],
                   {"J1": (TimeSlot("月", 1),)})["短大・前期"]
     starts = [c.row for c in sheet["A"] if c.value and "時限" in str(c.value)]
-    assert starts[1] - starts[0] >= 5, "1 時限ぶんの高さが足りない"
+    assert starts[1] - starts[0] >= ROWS_FOR_PERIOD_LABEL, "1 時限ぶんの高さが足りない"
+
+
+def test_the_period_label_always_fits_in_the_height_reserved_for_it(tmp_path):
+    """空行を広げたら、確保する高さも一緒に広がる。
+
+    **別々に持つと、間をあけたときに授業時間が行の下へ隠れる。**
+    実際の行数（名前・空行・開始・〜・終了）が、確保した行数に収まって
+    いることを見る。
+    """
+    sheet = write(tmp_path, [make("A1")], {"A1": (TimeSlot("月", 1),)})["経営・前期"]
+    label = next(str(c.value) for c in sheet["A"] if c.value and "1時限" in str(c.value))
+
+    body, times = label.split("\n", 1)
+    assert body == "1時限"
+    assert times.startswith("\n" * PERIOD_LABEL_GAP), "空行の数が合っていない"
+    assert label.count("\n") + 1 <= ROWS_FOR_PERIOD_LABEL, "確保した高さに収まらない"
+
+    # 空ける量は事務局が決めた見た目。変えるときは実際に刷って確かめること。
+    assert PERIOD_LABEL_GAP == 4
 
 
 def test_the_shading_alternates_like_a_checkerboard(tmp_path):
