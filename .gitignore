@@ -5,7 +5,10 @@ backend/.env
 backend/data/sessions/
 backend/logs/
 .pytest_cache/
-timetable-generator.zip
+
+# 配布用 zip（timetable-generator.zip）は**追跡する**。事務局へ渡すものを
+# ブランチから直接取れるようにするため。make-dist.sh は同じ内容から必ず
+# 同じ zip を作るので、アプリを変えないかぎり差分は出ない。
 
 # ブラウザ操作の副産物。スナップショットやコンソールログが溜まる。
 .playwright-mcp/
